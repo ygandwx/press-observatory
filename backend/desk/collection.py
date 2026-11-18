@@ -1,5 +1,7 @@
+from contextlib import nullcontext
 from datetime import timedelta
 from difflib import SequenceMatcher
+import hashlib
 import json
 import os
 import re
@@ -11,12 +13,21 @@ from django.db import connection, transaction
 from django.db.models import Q, F
 from django.utils import timezone
 from .catalog import EVENTS, IMPORTANCE
+from .crawl import guarded, validate_profile
 from .domain import record
-from .external import analyze, document, fetch, normalize_url, ExternalError
-from .models import Source, Run, Rule, Policy, Event, Change
+from .external import (
+    check_access_page,
+    active_crawler,
+    analyze,
+    document,
+    fetch,
+    normalize_url,
+    ExternalError,
+)
+from .models import Article, Source, Run, Rule, Policy, Event, Change
 
 ADAPTERS = ["html", "rss", "公众号", "微博", "头条号", "百家号", "短视频", "人工"]
-COUNTERS = ["发现", "命中", "AI 分析", "自动入库", "待审", "过滤", "重复"]
+COUNTERS = ["发现", "命中", "AI 分析", "自动入库", "待审", "过滤", "重复", "失败"]
 
 
 @transaction.atomic
@@ -32,13 +43,28 @@ def enqueue(trigger, key, ids=None):
     ]
 
 
+def source_signature(source):
+    raw = json.dumps(
+        [source.url, source.adapter, source.profile], sort_keys=True, ensure_ascii=False
+    )
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 def schedule(now=None):
     local = timezone.localtime(now or timezone.now())
-    slots = [h for h in (8, 18) if h <= local.hour]
-    if slots:
-        hour = slots[-1]
-        return enqueue("定时采集", f"schedule:{local.date()}:{hour}")
-    return enqueue("定时采集", f"schedule:{local.date() - timedelta(days=1)}:18")
+    slot = 18 if local.hour < 8 or local.hour >= 18 else 8
+    day = local.date() - timedelta(days=int(local.hour < 8))
+    ids = []
+    for source in Source.objects.filter(enabled=True, scheduled=True).only(
+        "pk", "profile"
+    ):
+        cadence = source.profile.get("cadence", "twice_daily")
+        if cadence == "twice_daily" or (
+            slot == 8
+            and (cadence == "daily" or (cadence == "weekly" and day.weekday() == 0))
+        ):
+            ids.append(source.pk)
+    return enqueue("定时采集", f"schedule:{day}:{slot}", ids)
 
 
 def adapter_items(source):
@@ -56,30 +82,48 @@ def adapter_items(source):
             for r in rows[:30]
             if isinstance(r, dict) and r.get("title") and r.get("url")
         ]
+    profile = validate_profile(source.profile)
+    limit = profile.get("limit", 30)
     landing, raw = fetch(source.url)
     if source.adapter == "rss":
         root = ElementTree.fromstring(raw)
         return [
             (node.findtext("title", ""), urljoin(landing, node.findtext("link", "")))
-            for node in root.findall(".//item")[:30]
+            for node in root.findall(".//item")[:limit]
         ]
     soup = BeautifulSoup(raw, "html.parser")
-    if soup.h1 and (
-        soup.find("article")
-        or re.search(r"(content_|/\d{4}[-/]|\.s?html?$)", urlsplit(landing).path)
+    check_access_page(soup)
+    if (
+        not profile.get("selector")
+        and soup.h1
+        and (
+            soup.find("article")
+            or re.search(r"(content_|/\d{4}[-/]|\.s?html?$)", urlsplit(landing).path)
+        )
     ):
         return [(soup.h1.get_text(" ", strip=True), landing)]
     found = {}
-    for a in soup.select("a[href]"):
-        title = a.get_text(" ", strip=True)
+    for a in soup.select(profile.get("selector", "a[href]")):
+        if not a.get("href"):
+            continue
+        heading = a.select_one("h1,h2,h3,h4") if profile.get("selector") else None
+        title = (a.get("title") or (heading or a).get_text(" ", strip=True)).strip()
         url = urljoin(landing, a.get("href", ""))
+        if (
+            landing.startswith("https://")
+            and url.startswith("http://")
+            and urlsplit(url).netloc == urlsplit(landing).netloc
+        ):
+            url = "https://" + url[7:]
         if (
             8 <= len(title) <= 500
             and urlsplit(url).scheme in ("http", "https")
             and urlsplit(url).hostname == urlsplit(landing).hostname
+            and urlsplit(url).path.startswith(profile.get("prefix", "/"))
+            and url != landing
         ):
             found.setdefault(url, title)
-    return [(t, u) for u, t in found.items()][:30]
+    return [(t, u) for u, t in found.items()][:limit]
 
 
 class ManualCheck(ValueError):
@@ -114,16 +158,25 @@ def inference(title, body):
 def ingest(source, title, url, rules, counts, run, lease):
     hits = [r for r in rules if r.word in title]
     kinds = {r.kind for r in hits}
-    if "排除词" in kinds or not {"主体词", "动作词"} <= kinds:
+    editorial_match = any(
+        term in title for term in source.profile.get("title_terms", [])
+    )
+    if "排除词" in kinds or (not editorial_match and not {"主体词", "动作词"} <= kinds):
         counts["过滤"] += 1
         return
     counts["命中"] += 1
+    if Article.objects.filter(url=normalize_url(url), events__isnull=False).exists():
+        counts["重复"] += 1
+        return
     canonical, headline, body = document(url)
     payload = {
         "title": headline or title,
         "url": canonical,
         "category": next((r.category for r in hits if r.category in EVENTS), "其他类"),
     }
+    crawler = active_crawler.get()
+    if crawler and crawler.published:
+        payload["published"] = crawler.published
     analysis = {}
     try:
         analysis = inference(payload["title"], body)
@@ -218,27 +271,35 @@ def work_once():
         run.state = "running"
         run.started = now
         run.expires = now + timedelta(minutes=10)
+        run.source_signature = source_signature(run.source)
         run.attempts += 1
         run.save()
     counts = {k: 0 for k in COUNTERS}
+    crawler = None
     try:
-        items = adapter_items(run.source)
-        counts["发现"] = len(items)
-        rules = list(Rule.objects.filter(enabled=True))
-        failures = []
-        for i, (title, url) in enumerate(items, 1):
-            try:
-                ingest(run.source, title, url, rules, counts, run, lease)
-            except (ValueError, ExternalError) as exc:
-                failures.append(str(exc)[:160])
-            if not Run.objects.filter(pk=run.pk, lease=lease).update(
-                progress=i * 100 // len(items),
-                counts=counts,
-                expires=timezone.now() + timedelta(minutes=10),
-            ):
-                raise ConflictLease()
-        state = "failed" if failures else "done"
-        message = "；".join(failures[:3]) or "采集完成"
+        with (
+            guarded(run.source)
+            if run.source.adapter in ("html", "rss")
+            else nullcontext()
+        ) as crawler:
+            items = adapter_items(run.source)
+            counts["发现"] = len(items)
+            rules = list(Rule.objects.filter(enabled=True))
+            failures = []
+            for i, (title, url) in enumerate(items, 1):
+                try:
+                    ingest(run.source, title, url, rules, counts, run, lease)
+                except (ValueError, ExternalError) as exc:
+                    failures.append(str(exc)[:160])
+                    counts["失败"] += 1
+                if not Run.objects.filter(pk=run.pk, lease=lease).update(
+                    progress=i * 100 // len(items),
+                    counts=counts,
+                    expires=timezone.now() + timedelta(minutes=10),
+                ):
+                    raise ConflictLease()
+            state = "failed" if failures else "done"
+            message = "；".join(failures[:3]) or "采集完成"
     except ManualCheck as exc:
         state, message = "manual", str(exc)
     except ConflictLease:
@@ -251,5 +312,6 @@ def work_once():
         counts=counts,
         progress=100,
         finished=timezone.now(),
+        crawl_evidence=crawler.audit if crawler is not None else {},
     )
     return True

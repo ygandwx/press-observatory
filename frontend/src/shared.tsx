@@ -22,6 +22,28 @@ export type Media = {
   archive_status: string;
   high_priority: boolean;
   origin_id?: string;
+  verification?: {
+    record?: {
+      date: string;
+      facts: {
+        field: string;
+        value: string;
+        url: string;
+        basis: string;
+        date: string;
+      }[];
+      checks: Record<string, string>;
+      searches: { url: string; note: string }[];
+      candidates: { url: string; note: string }[];
+    };
+  };
+  reviewed_sources?: {
+    id: number;
+    name: string;
+    url: string;
+    enabled: boolean;
+    scheduled: boolean;
+  }[];
   origin_record?: {
     url?: string;
     metadata?: Record<string, { text: string; links: string[][] }>;

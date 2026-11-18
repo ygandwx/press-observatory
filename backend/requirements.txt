@@ -30,6 +30,8 @@ idna==3.20
     # via
     #   anyio
     #   httpx
+protego==0.7.0
+    # via -r backend/requirements.in
 psycopg==3.3.9
     # via -r backend/requirements.in
 psycopg-binary==3.3.9

@@ -1,5 +1,9 @@
 """Read public HTTP documents through a pinned public address, including redirects."""
 
+from contextvars import ContextVar
+from datetime import date
+import re
+
 import gzip
 import io
 import http.client
@@ -51,8 +55,11 @@ def normalize_url(raw):
         raise ExternalError("请输入有效的公共 HTTP(S) 来源地址。")
 
 
-def fetch(raw, redirects=3):
-    url = normalize_url(raw)
+active_crawler = ContextVar("active_crawler", default=None)
+
+
+def request_once(url):
+    """One public-address-pinned GET. Leave HTTP policy and redirects to the caller."""
     try:
         u = urlsplit(url)
         port = u.port or (443 if u.scheme == "https" else 80)
@@ -88,10 +95,9 @@ def fetch(raw, redirects=3):
                 },
             )
             res = conn.getresponse()
-            if 300 <= res.status < 400 and redirects and res.getheader("Location"):
-                return fetch(urljoin(url, res.getheader("Location")), redirects - 1)
+            headers = {key.lower(): value for key, value in res.getheaders()}
             if not 200 <= res.status < 300:
-                raise ExternalError(f"来源返回 HTTP {res.status}")
+                return res.status, headers, b""
             data = res.read(2_000_001)
             if len(data) > 2_000_000:
                 raise ExternalError("来源文档超过 2 MB。")
@@ -100,7 +106,7 @@ def fetch(raw, redirects=3):
                     data = compressed.read(2_000_001)
                 if len(data) > 2_000_000:
                     raise ExternalError("解压后的正文过大。")
-            return url, data
+            return res.status, headers, data
         finally:
             conn.close()
             sock.close()
@@ -108,14 +114,83 @@ def fetch(raw, redirects=3):
         raise ExternalError("无法读取来源：" + type(exc).__name__) from exc
 
 
+def fetch(raw, redirects=3):
+    url = normalize_url(raw)
+    crawler = active_crawler.get()
+    for hop in range(redirects + 1):
+        status, headers, data = crawler.request(url) if crawler else request_once(url)
+        if 300 <= status < 400 and headers.get("location") and hop < redirects:
+            target = normalize_url(urljoin(url, headers["location"]))
+            if (
+                crawler
+                and urlsplit(url).scheme == "https"
+                and urlsplit(target).scheme != "https"
+            ):
+                raise ExternalError("采集跳转降低传输安全性，需人工核对。")
+            url = target
+            continue
+        if not 200 <= status < 300:
+            raise ExternalError(f"来源返回 HTTP {status}")
+        return url, data
+
+
+def check_access_page(soup):
+    title = soup.title.get_text(" ", strip=True).casefold() if soup.title else ""
+    if any(
+        t in title
+        for t in (
+            "安全验证",
+            "人机验证",
+            "访问验证",
+            "access denied",
+            "just a moment",
+            "captcha",
+            "用户登录",
+        )
+    ):
+        raise ExternalError("来源要求验证或登录，转人工核对。")
+
+
 def document(url):
     canonical, raw = fetch(url)
     soup = BeautifulSoup(raw, "html.parser")
-    title = soup.find("h1") or soup.title
-    body = soup.find("article") or soup.find("main") or soup.body or soup
+    crawler = active_crawler.get()
+    profile = crawler.profile if crawler else {}
+    title = (
+        soup.select_one(profile["headline_selector"])
+        if "headline_selector" in profile
+        else soup.find("h1") or soup.title
+    )
+    body = (
+        soup.select_one(profile["body_selector"])
+        if "body_selector" in profile
+        else soup.find("article") or soup.find("main") or soup.body or soup
+    )
+    if title is None or body is None:
+        raise ExternalError("栏目正文结构已变化，未找到核验过的标题或正文。")
+    headline = " ".join(title.get_text(" ", strip=True).split())
+    if crawler:
+        check_access_page(soup)
+        crawler.published = None
+        meta = (
+            soup.select_one(profile["date_selector"])
+            if profile.get("date_selector")
+            else soup.select_one(
+                'meta[property="article:published_time"], meta[name="publishdate" i],meta[name="pubdate" i]'
+            )
+        )
+        if meta:
+            value = meta.get("content") or meta.get_text(" ", strip=True)
+            found = re.search(
+                r"(?<!\d)(20\d{2})[-/年.](\d{1,2})[-/月.](\d{1,2})(?!\d)", value
+            )
+            if found:
+                try:
+                    crawler.published = date(*map(int, found.groups())).isoformat()
+                except ValueError:
+                    pass
     for tag in body.select("script,style,nav,header,footer"):
         tag.decompose()
-    headline = title.get_text(" ", strip=True) if title else ""
     text = body.get_text(" ", strip=True)
     if not headline or len(text) < 20:
         raise ExternalError("未能解析可核验的网页标题与正文。")

@@ -986,3 +986,19 @@ h3 {
     font-size: 20px;
   }
 }
+
+.evidence details {
+  padding: 8px 0;
+  border-bottom: 1px solid #e5e9ed;
+}
+.evidence summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.evidence details p {
+  margin: 8px 0;
+}
+.evidence small {
+  display: inline-block;
+  margin-left: 6px;
+}

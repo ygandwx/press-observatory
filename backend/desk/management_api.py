@@ -12,7 +12,7 @@ from .domain import require, media_row, event_row, query_events, bounded_int
 from .events_api import page_rows
 from .models import Article, Media, Source, Rule, Policy, Change, Run
 from .catalog import MARKET_SECTIONS, CHANNELS, CATEGORIES, FOCUS, LEVELS
-from .collection import ADAPTERS, COUNTERS, enqueue, inference
+from .collection import ADAPTERS, COUNTERS, enqueue, inference, source_signature
 from .snapshots import consistent_read, project_events, freeze, load, filter_media
 from .external import normalize_url, document
 
@@ -21,7 +21,7 @@ class MediaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Media
         exclude = ["updated", "followers"]
-        read_only_fields = ["origin_id", "origin_record"]
+        read_only_fields = ["origin_id", "origin_record", "verification"]
 
     def validate(self, data):
         category = data.get("category", getattr(self.instance, "category", ""))
@@ -63,6 +63,37 @@ class MediaSerializer(serializers.ModelSerializer):
 
 
 class SourceSerializer(serializers.ModelSerializer):
+    def validate(self, data):
+        altered = self.instance and any(
+            k in data and data[k] != getattr(self.instance, k)
+            for k in ("url", "profile", "adapter")
+        )
+        if altered and data.get("scheduled"):
+            raise serializers.ValidationError(
+                "栏目配置已更改，请先取消定时并重新实测。"
+            )
+        if altered:
+            data["scheduled"] = False
+        if data.get("scheduled") and not (self.instance and self.instance.scheduled):
+            if (
+                not self.instance
+                or not self.instance.run_set.filter(
+                    state="done", source_signature=source_signature(self.instance)
+                ).exists()
+            ):
+                raise serializers.ValidationError(
+                    "先按当前配置完成一次实际采集，再纳入定时。"
+                )
+        return data
+
+    def validate_profile(self, value):
+        from .crawl import validate_profile
+
+        try:
+            return validate_profile(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
     class Meta:
         model = Source
         fields = "__all__"
@@ -120,6 +151,13 @@ def archives(req, pk=None):
                 **media_row(m),
                 "following": m.followers.filter(pk=req.user.pk).exists(),
                 "origin_record": m.origin_record,
+                "verification": m.verification,
+                "reviewed_sources": list(
+                    Source.objects.filter(Q(media=m) | Q(coverage_media=m))
+                    .distinct()
+                    .order_by("name")
+                    .values("id", "name", "url", "enabled", "scheduled")
+                ),
                 "count": qs.count(),
                 "timeline": [event_row(e) for e in qs[:30]],
             }
@@ -217,6 +255,7 @@ def monitoring(req):
                 "在库机构": len(media),
                 "启用信源": sum(row["enabled"] for row in sources),
                 "信源总数": len(sources),
+                "定时信源": sum(row["enabled"] and row["scheduled"] for row in sources),
                 "曾完成采集的信源": Run.objects.filter(
                     state="done", source_id__isnull=False
                 )
