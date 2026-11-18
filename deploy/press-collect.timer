@@ -1,0 +1,10 @@
+[Unit]
+Description=Schedule press collection in Beijing time
+
+[Timer]
+OnCalendar=*-*-* 08,18:00:00 Asia/Shanghai
+Persistent=true
+Unit=press-collect.service
+
+[Install]
+WantedBy=timers.target

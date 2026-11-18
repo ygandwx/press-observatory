@@ -1,0 +1,9 @@
+[Unit]
+Description=Enqueue press source collection
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/press-observatory
+ExecStart=/usr/bin/docker compose exec -T worker python manage.py enqueue
