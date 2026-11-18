@@ -1,8 +1,10 @@
 x-app: &app
+  image: press-observatory:${APP_TAG:-local}
   build: .
   env_file: .env
   environment:
     POSTGRES_HOST: db
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
   restart: unless-stopped
 services:

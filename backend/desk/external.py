@@ -61,7 +61,15 @@ def fetch(raw, redirects=3):
             not ipaddress.ip_address(a[4][0]).is_global for a in addresses
         ):
             raise ExternalError("来源地址不可公开访问。")
-        sock = socket.create_connection((addresses[0][4][0], port), timeout=6)
+        public_addresses = list(dict.fromkeys(a[4][0] for a in addresses))
+        for address in public_addresses[:3]:
+            try:
+                sock = socket.create_connection((address, port), timeout=5)
+                break
+            except OSError as exc:
+                last_error = exc
+        else:
+            raise last_error
         conn = http.client.HTTPConnection(u.hostname, port, timeout=8)
         try:
             conn.sock = (

@@ -35,3 +35,4 @@ jobs:
       - run: python manage.py test desk
         working-directory: backend
       - run: docker build -t press-observatory:ci .
+      - run: sh scripts/smoke_compose.sh
