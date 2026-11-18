@@ -223,5 +223,71 @@
       "cadence": "weekly"
     },
     "regular": false
+  },
+  {
+    "key": "jiancha",
+    "name": "检察日报正义网·运营公告",
+    "url": "https://www.jcrb.com/sidebar/announcements/",
+    "media": "检察日报",
+    "covered": [],
+    "profile": {
+      "selector": "ul.liebiao li a[href]",
+      "prefix": "/sidebar/announcements/",
+      "limit": 4,
+      "interval": 3,
+      "title_terms": [
+        "新媒体项目服务",
+        "电子资料产品",
+        "印刷服务",
+        "新媒体产品"
+      ],
+      "publisher": "检察日报正义网",
+      "cadence": "weekly"
+    },
+    "regular": true
+  },
+  {
+    "key": "hunan",
+    "name": "湖南日报社·报社动态",
+    "url": "https://hnrbjt.hunantoday.cn/class/2311.html",
+    "media": "湖南日报",
+    "covered": [],
+    "profile": {
+      "selector": "ul.zxlbNr h3 a[href]",
+      "prefix": "/news/",
+      "limit": 3,
+      "interval": 3,
+      "title_terms": [
+        "湖南日报理论评论工作",
+        "新湖南客户端改版",
+        "媒体系统性变革"
+      ],
+      "publisher": "湖南日报社",
+      "cadence": "weekly"
+    },
+    "regular": true
+  },
+  {
+    "key": "wenhua",
+    "name": "文化和旅游部·中国文化传媒集团动态",
+    "url": "https://www.mct.gov.cn/whzx/zsdw/zgwhcmjtyxgs/",
+    "media": null,
+    "covered": [
+      "中国文化报"
+    ],
+    "profile": {
+      "selector": "table.lm_tabe a[href]",
+      "prefix": "/whzx/zsdw/zgwhcmjtyxgs/",
+      "limit": 4,
+      "interval": 3,
+      "title_terms": [
+        "中国文化传媒集团入选",
+        "集团媒体资源",
+        "集团数字化"
+      ],
+      "publisher": "文化和旅游部",
+      "cadence": "weekly"
+    },
+    "regular": true
   }
 ]

@@ -12,7 +12,7 @@ from .domain import require, media_row, event_row, query_events, bounded_int
 from .events_api import page_rows
 from .models import Article, Media, Source, Rule, Policy, Change, Run
 from .catalog import MARKET_SECTIONS, CHANNELS, CATEGORIES, FOCUS, LEVELS
-from .collection import ADAPTERS, COUNTERS, enqueue, inference, source_signature
+from .collection import ADAPTERS, COUNTERS, enqueue, inference, verified_for_schedule
 from .snapshots import consistent_read, project_events, freeze, load, filter_media
 from .external import normalize_url, document
 
@@ -75,14 +75,9 @@ class SourceSerializer(serializers.ModelSerializer):
         if altered:
             data["scheduled"] = False
         if data.get("scheduled") and not (self.instance and self.instance.scheduled):
-            if (
-                not self.instance
-                or not self.instance.run_set.filter(
-                    state="done", source_signature=source_signature(self.instance)
-                ).exists()
-            ):
+            if not self.instance or not verified_for_schedule(self.instance):
                 raise serializers.ValidationError(
-                    "先按当前配置完成一次实际采集，再纳入定时。"
+                    "先按当前配置完成采集、命中并取得原文，再纳入定时。"
                 )
         return data
 
@@ -251,6 +246,11 @@ def monitoring(req):
             "coverage": {
                 "关联信源机构": len(
                     {row["media_id"] for row in sources if row["media_id"]}
+                    | set(
+                        Source.coverage_media.through.objects.values_list(
+                            "media_id", flat=True
+                        )
+                    )
                 ),
                 "在库机构": len(media),
                 "启用信源": sum(row["enabled"] for row in sources),

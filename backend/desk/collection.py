@@ -50,6 +50,16 @@ def source_signature(source):
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def verified_for_schedule(source):
+    counts = source.run_set.filter(
+        state="done", source_signature=source_signature(source)
+    ).values_list("counts", flat=True)
+    return (
+        any(c.get("命中", 0) > 0 for c in counts)
+        and Article.objects.filter(source=source).exists()
+    )
+
+
 def schedule(now=None):
     local = timezone.localtime(now or timezone.now())
     slot = 18 if local.hour < 8 or local.hour >= 18 else 8
