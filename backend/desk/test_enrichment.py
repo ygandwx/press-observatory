@@ -18,6 +18,7 @@ class VerifiedRosterTests(TestCase):
     def test_atomic_roundtrip_and_retained_manual_field(self):
         org = Media.objects.create(
             name="样本",
+            kind="",
             origin_id=uuid4(),
             origin_record={"官网": "未填"},
             channels={"官网": "https://existing.invalid/"},
@@ -66,6 +67,7 @@ class VerifiedRosterTests(TestCase):
             org.channels["官方公众号"] = "编辑核定账号"
             org.save()
             item["facts"][2] = fact("官方公众号", "修订后的许可")
+            item["facts"].append(fact("客户端", "样本客户端"))
             p.write_text(json.dumps([item, dict(item, id=str(uuid4()))]))
             with self.assertRaises(CommandError):
                 call_command("verify_roster", "import", p, apply=True)
@@ -77,6 +79,15 @@ class VerifiedRosterTests(TestCase):
             call_command("verify_roster", "import", p, apply=True)
             org.refresh_from_db()
             self.assertEqual(org.channels["官方公众号"], "编辑核定账号")
+            item["review_history"] = item["facts"]
+            item["facts"] = []
+            p.write_text(json.dumps([item]))
+            call_command("verify_roster", "import", p, apply=True)
+            org.refresh_from_db()
+            self.assertEqual(org.channels["官方公众号"], "编辑核定账号")
+            self.assertEqual(org.channels["官网"], "https://existing.invalid/")
+            self.assertNotIn("客户端", org.channels)
+            self.assertEqual(org.kind, "")
 
 
 class CrawlPolicyTests(TestCase):
@@ -179,6 +190,7 @@ class CrawlPolicyTests(TestCase):
                 collection.adapter_items(self.src),
                 [("Press Association launches", "https://press.invalid/article/1")],
             )
+
         self.assertFalse(
             SourceSerializer(
                 self.src, data={"scheduled": True}, partial=True
@@ -214,3 +226,109 @@ class CrawlPolicyTests(TestCase):
         self.assertTrue(edit.is_valid(), edit.errors)
         edit.save()
         self.assertFalse(Source.objects.get(pk=self.src.pk).scheduled)
+
+    def test_public_embedded_list_keeps_only_scoped_same_host_articles(self):
+        self.src.profile = {
+            "embedded_list_selector": "#public-list",
+            "subject_terms": ["Press Association"],
+            "prefix": "/article/",
+            "limit": 1,
+        }
+        data = [
+            {"title": "Other institution announces project", "url": "/article/other"},
+            {
+                "title": "Press Association announces project",
+                "url": "https://other.invalid/article/1",
+            },
+            {
+                "title": "Press Association announces in print",
+                "url": "/article/verified",
+            },
+        ]
+        with patch(
+            "desk.collection.fetch",
+            return_value=(
+                self.src.url,
+                '<div id="public-list">' + json.dumps(data) + "</div>",
+            ),
+        ):
+            self.assertEqual(
+                collection.adapter_items(self.src),
+                [
+                    (
+                        "Press Association announces in print",
+                        "https://press.invalid/article/verified",
+                    )
+                ],
+            )
+        with patch(
+            "desk.collection.fetch",
+            return_value=(self.src.url, '<div id="public-list">unavailable</div>'),
+        ):
+            with self.assertRaises(external.ExternalError):
+                collection.adapter_items(self.src)
+
+    def test_directory_requires_listed_url_matching_title_and_publisher(self):
+        doc = {
+            "url": "https://publisher.invalid/public/report",
+            "title": "Press annual report",
+            "media": "报社",
+            "headline_selector": "h1",
+            "body_selector": "article",
+        }
+        self.src.profile = {"documents": [doc], "title_terms": ["report"]}
+        self.src.save()
+        org = Media.objects.create(name="报社")
+        self.src.coverage_media.add(org)
+        page = '<a href="http://publisher.invalid/public/report">cover</a><a href="https://other.invalid/report">unknown</a>'
+        with patch("desk.collection.fetch", return_value=(self.src.url, page)):
+            self.assertEqual(
+                collection.adapter_items(self.src), [(doc["title"], doc["url"])]
+            )
+
+        def reply(url):
+            if url.endswith("/robots.txt"):
+                return 200, {}, b"User-agent: *\nDisallow: /private\n"
+            if url == self.src.url:
+                return 200, {}, page.encode()
+            if url == doc["url"]:
+                return (
+                    200,
+                    {},
+                    b"<h1>Press annual report</h1><article>Original source publication details, dated and signed.</article>",
+                )
+            self.fail(url)
+
+        with (
+            patch("desk.crawl.request_once", side_effect=reply),
+            patch("desk.crawl.wait_slot"),
+        ):
+            job = collection.enqueue("栏目实测", "annual", [self.src.pk])[0]
+            self.assertTrue(collection.work_once())
+            run = Run.objects.get(pk=job)
+            self.assertEqual(run.state, "done", run.message)
+            self.assertEqual(
+                set(run.crawl_evidence),
+                {"https://press.invalid", "https://publisher.invalid"},
+            )
+            self.assertEqual(
+                Article.objects.get(url=doc["url"]).events.get().media.get(), org
+            )
+            self.assertFalse(collection.verified_for_schedule(self.src))
+        doc["url"] = "https://publisher.invalid/public/other"
+        self.src.profile["documents"] = [doc]
+        with patch("desk.collection.fetch", return_value=(self.src.url, page)):
+            self.assertEqual(collection.adapter_items(self.src), [])
+
+    def test_public_metadata_preserves_original_date_and_headline(self):
+        self.src.profile = {
+            "embedded_metadata_selector": "#info",
+            "body_selector": "article",
+        }
+        raw = '<title>publisher</title><div id="info">{"title":"Paper report","crtime":"2026-05-20 08:00:00"}</div><article>A full original publication body.</article>'
+        with (
+            guarded(self.src) as crawler,
+            patch("desk.external.fetch", return_value=(self.src.url, raw)),
+        ):
+            self.assertEqual(external.document(self.src.url)[1], "Paper report")
+            self.assertEqual(crawler.published, "2026-05-20")

@@ -42,7 +42,10 @@ def validate(row):
         or not row["searches"]
     ):
         raise ValueError("缺少逐家检索记录")
-    for item in row["facts"]:
+    history = row.get("review_history", [])
+    if not isinstance(history, list):
+        raise ValueError("修订记录须为列表")
+    for item in row["facts"] + history:
         if item["field"] not in ALL_FIELDS or not all(
             isinstance(item[k], str) and item[k].strip()
             for k in ("value", "basis", "date")
@@ -56,6 +59,13 @@ def validate(row):
         check_url(item["url"])
         if not isinstance(item["note"], str) or not item["note"].strip():
             raise ValueError("查阅记录缺少说明")
+    for item in row.get("related_channels", []):
+        if item["field"] not in CHANNELS or not all(
+            isinstance(item.get(k), str) and item[k].strip()
+            for k in ("name", "relationship", "note")
+        ):
+            raise ValueError("关联渠道缺少名称、关系或依据。")
+        check_url(item["url"])
     return UUID(row["id"])
 
 
@@ -66,6 +76,20 @@ def enrich(media, row):
     channels = dict(media.channels)
     previous = media.verification.get("applied", {})
     applied = {}
+    withdrawn = {(f["field"], f["value"]) for f in row.get("review_history", [])}
+    # A missing fact is not a withdrawal. Retire only an explicit, unedited import.
+    for field in previous.keys() - values.keys():
+        current = (
+            channels.get(field) if field in CHANNELS else getattr(media, FIELDS[field])
+        )
+        if current != previous[field]:
+            continue
+        if (field, current) not in withdrawn:
+            applied[field] = current
+        elif field in CHANNELS:
+            channels.pop(field)
+        else:
+            setattr(media, FIELDS[field], "")
     for field, value in values.items():
         if field in CHANNELS:
             current = channels.get(field, "")
@@ -81,7 +105,6 @@ def enrich(media, row):
             ):
                 setattr(media, key, value)
                 applied[field] = value
-    # A withdrawn verification must not silently erase local editorial work.
     media.channels = channels
     media.verification = {"record": row, "applied": applied}
 

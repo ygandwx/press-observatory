@@ -64,6 +64,12 @@ class MediaSerializer(serializers.ModelSerializer):
 
 class SourceSerializer(serializers.ModelSerializer):
     def validate(self, data):
+        profile = data.get("profile", self.instance.profile if self.instance else {})
+        adapter = data.get(
+            "adapter", self.instance.adapter if self.instance else "html"
+        )
+        if profile.get("documents") and adapter != "html":
+            raise serializers.ValidationError("年度目录只支持公开网页。")
         altered = self.instance and any(
             k in data and data[k] != getattr(self.instance, k)
             for k in ("url", "profile", "adapter")

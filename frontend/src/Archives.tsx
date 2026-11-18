@@ -500,6 +500,7 @@ function Verification({ m }: { m: Media }) {
     <section className="panel evidence">
       <h2>公开资料核验</h2>
       <p className="muted">核验日期　{row.date}</p>
+      {row.collection_note && <p>{row.collection_note}</p>}
       {row.facts.map((f, i) => (
         <details key={i}>
           <summary>
@@ -512,6 +513,24 @@ function Verification({ m }: { m: Media }) {
           <small>{f.date}</small>
         </details>
       ))}
+      {!!row.related_channels?.length && (
+        <details>
+          <summary>集团共享、历史及其他关联渠道</summary>
+          {row.related_channels.map((c, i) => (
+            <p key={i}><b>{c.field} · {c.name}</b>　{c.relationship}。{c.note}{" "}
+              <a href={c.url} target="_blank" rel="noreferrer">关系出处 ↗</a></p>
+          ))}
+        </details>
+      )}
+      {!!row.review_history?.length && (
+        <details>
+          <summary>前次记录与本次修订</summary>
+          {row.review_history.map((f, i) => (
+            <p key={i}><b>{f.field}</b>　{f.value}　{f.basis}{" "}
+              <a href={f.url} target="_blank" rel="noreferrer">前次出处 ↗</a></p>
+          ))}
+        </details>
+      )}
       <details>
         <summary>各字段核对记录</summary>
         {Object.entries(row.checks).map(([k, v]) => (
