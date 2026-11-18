@@ -1,0 +1,227 @@
+[
+  {
+    "key": "cctv",
+    "name": "中央广播电视总台·工作动态",
+    "url": "https://www.cctv.com/gyys/gzdt/index.shtml",
+    "media": "中央广播电视总台",
+    "covered": [],
+    "profile": {
+      "selector": ".video_txt a[href]",
+      "prefix": "/",
+      "limit": 8,
+      "interval": 3,
+      "title_terms": [
+        "智能传播论坛",
+        "媒体合作周",
+        "数智化转型",
+        "战略合作协议"
+      ],
+      "publisher": "中央广播电视总台",
+      "cadence": "daily"
+    },
+    "regular": true
+  },
+  {
+    "key": "zhejiang",
+    "name": "浙江日报报业集团·集团动态",
+    "url": "https://www.8531.cn/groupnews/zxdt/",
+    "media": null,
+    "covered": [
+      "浙江日报",
+      "钱江晚报"
+    ],
+    "profile": {
+      "selector": ".m-list .item a[href]",
+      "prefix": "/groupnews/zxdt/",
+      "limit": 4,
+      "interval": 3,
+      "title_terms": [
+        "潮新闻如何",
+        "浙报集团",
+        "报业创新发展案例"
+      ],
+      "publisher": "浙江日报报业集团",
+      "cadence": "weekly",
+      "headline_selector": "h2.doc-title",
+      "body_selector": ".html-content",
+      "date_selector": ".doc-info"
+    },
+    "regular": true
+  },
+  {
+    "key": "hangzhou",
+    "name": "杭州日报报业集团·集团要闻",
+    "url": "https://www.hbjt.com.cn/news/",
+    "media": null,
+    "covered": [
+      "杭州日报",
+      "都市快报"
+    ],
+    "profile": {
+      "selector": ".maitxtcont li a[href]",
+      "prefix": "/news/C002001_",
+      "limit": 4,
+      "interval": 60,
+      "title_terms": [
+        "报业集团社会责任报告",
+        "市域深融",
+        "新研所推出"
+      ],
+      "publisher": "杭州日报报业集团",
+      "cadence": "weekly",
+      "headline_selector": ".maintxtaltt",
+      "body_selector": ".maintxtalbd",
+      "date_selector": ".maintxtaldate"
+    },
+    "regular": true
+  },
+  {
+    "key": "xiamen",
+    "name": "厦门日报社·报社公告",
+    "url": "https://www.xmnn.cn/notice/xmrbsgg/",
+    "media": "厦门日报",
+    "covered": [],
+    "profile": {
+      "selector": "#sort_body li a[href]",
+      "prefix": "/notice/xmrbsgg/",
+      "limit": 2,
+      "interval": 3,
+      "title_terms": [
+        "厦门日报社会责任报告"
+      ],
+      "publisher": "厦门日报社",
+      "cadence": "weekly"
+    },
+    "regular": true
+  },
+  {
+    "key": "chengdu",
+    "name": "成都传媒集团·集团动态",
+    "url": "https://www.cmgchengdu.com/news-5-25-1.html",
+    "media": null,
+    "covered": [
+      "成都日报",
+      "成都商报",
+      "每日经济新闻"
+    ],
+    "profile": {
+      "selector": ".news-list h4 a[href]",
+      "prefix": "/content-",
+      "limit": 3,
+      "interval": 3,
+      "title_terms": [
+        "集团负责人",
+        "报业集团",
+        "融媒体"
+      ],
+      "publisher": "成都传媒集团",
+      "cadence": "weekly"
+    },
+    "regular": false
+  },
+  {
+    "key": "rmlt",
+    "name": "人民论坛杂志社·社务动态",
+    "url": "https://www.rmlt.com.cn/rmlt/",
+    "media": "人民论坛",
+    "covered": [],
+    "profile": {
+      "selector": "ul.txt-list li a[href]",
+      "prefix": "/",
+      "limit": 4,
+      "interval": 3,
+      "title_terms": [
+        "期刊印装服务",
+        "杂志社与",
+        "广告经营权"
+      ],
+      "publisher": "人民论坛杂志社",
+      "cadence": "daily"
+    },
+    "regular": true
+  },
+  {
+    "key": "minsheng",
+    "name": "民生周刊·杂志社动态",
+    "url": "https://www.msweekly.com/category.html?catid=122",
+    "media": "民生周刊",
+    "covered": [],
+    "profile": {
+      "selector": ".ListName a[href]",
+      "prefix": "/show.html",
+      "limit": 4,
+      "interval": 3,
+      "title_terms": [
+        "《民生周刊》参观考察",
+        "到访民生周刊",
+        "与民生周刊",
+        "杂志社与"
+      ],
+      "publisher": "民生周刊",
+      "cadence": "weekly"
+    },
+    "regular": true
+  },
+  {
+    "key": "lvyou",
+    "name": "文化和旅游部·中国旅游报社动态",
+    "url": "https://www.mct.gov.cn/whzx/zsdw/zglybs/",
+    "media": "中国旅游报",
+    "covered": [],
+    "profile": {
+      "selector": "table.lm_tabe a[href]",
+      "prefix": "/whzx/zsdw/zglybs/",
+      "limit": 5,
+      "interval": 3,
+      "title_terms": [
+        "中国旅游报社圆满完成",
+        "中国旅游报社与",
+        "报社媒体融合"
+      ],
+      "publisher": "文化和旅游部",
+      "cadence": "weekly"
+    },
+    "regular": true
+  },
+  {
+    "key": "jiaoyujia",
+    "name": "教育家杂志社·本站公告",
+    "url": "https://jyj.gmw.cn/",
+    "media": "教育家",
+    "covered": [],
+    "profile": {
+      "selector": "ul.benzhan_ul li a[href]",
+      "prefix": "/",
+      "limit": 3,
+      "interval": 3,
+      "title_terms": [
+        "杂志社推荐参评",
+        "杂志社拟参评"
+      ],
+      "publisher": "教育家杂志社",
+      "cadence": "weekly"
+    },
+    "regular": false
+  },
+  {
+    "key": "keji",
+    "name": "科技日报社·最新动态",
+    "url": "https://www.stdaily.com/kjrb/node_986.html",
+    "media": "科技日报",
+    "covered": [],
+    "profile": {
+      "selector": ".newsList li a[href]",
+      "prefix": "/web/",
+      "limit": 4,
+      "interval": 3,
+      "title_terms": [
+        "巡视科技日报社",
+        "科技日报社组织",
+        "报业融合发展"
+      ],
+      "publisher": "科技日报社",
+      "cadence": "weekly"
+    },
+    "regular": false
+  }
+]

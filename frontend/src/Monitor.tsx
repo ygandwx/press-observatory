@@ -23,6 +23,7 @@ type Source = {
   adapter: string;
   enabled: boolean;
   trusted: boolean;
+  scheduled: boolean;
   level: string;
 };
 type Rule = {
@@ -80,6 +81,7 @@ function Editors({
   const [f, set] = useState<Dict>({}),
     [on, enable] = useState(true),
     [trust, trusted] = useState(false),
+    [schedule, setSchedule] = useState(false),
     a = useAction();
   const source = tab === "信源配置",
     cfg = s.rights.includes("configure");
@@ -90,12 +92,14 @@ function Editors({
     );
     set({ ...v, media: v.media_id || "" });
     enable(item.enabled);
+    setSchedule("scheduled" in item && item.scheduled);
     trusted("trusted" in item && item.trusted);
   }
   function clear() {
     set({});
     enable(true);
     trusted(false);
+    setSchedule(false);
   }
   return (
     <>
@@ -117,6 +121,7 @@ function Editors({
                       media: f.media || null,
                       enabled: on,
                       trusted: trust,
+                      scheduled: schedule,
                       ...(f.id ? { id: f.id } : {}),
                     }
                   : {
@@ -179,6 +184,14 @@ function Editors({
                   onChange={(e) => trusted(e.target.checked)}
                 />
                 可信信源
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={schedule}
+                  onChange={(e) => setSchedule(e.target.checked)}
+                />
+                纳入定时采集
               </label>
             </>
           ) : (

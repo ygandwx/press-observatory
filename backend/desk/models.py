@@ -8,6 +8,7 @@ from .catalog import PERMISSIONS
 class Media(models.Model):
     origin_id = models.UUIDField(null=True, unique=True, editable=False)
     origin_record = models.JSONField(default=dict, blank=True, editable=False)
+    verification = models.JSONField(default=dict, blank=True, editable=False)
     description = models.TextField(blank=True)
     archive_status = models.CharField(max_length=40, blank=True)
     high_priority = models.BooleanField(default=False)
@@ -40,6 +41,18 @@ class Source(models.Model):
     trusted = models.BooleanField(default=False)
     enabled = models.BooleanField(default=True)
     level = models.CharField(max_length=50, default="补充信源")
+    profile = models.JSONField(default=dict, blank=True)
+    scheduled = models.BooleanField(default=False)
+    coverage_media = models.ManyToManyField(
+        Media, blank=True, related_name="coverage_sources"
+    )
+
+
+class CrawlHost(models.Model):
+    host = models.CharField(max_length=253, primary_key=True)
+    last_request = models.DateTimeField(null=True)
+    hold_until = models.DateTimeField(null=True)
+    spacing = models.FloatField(default=2)
 
 
 class Rule(models.Model):
@@ -109,6 +122,8 @@ class Change(models.Model):
 
 
 class Run(models.Model):
+    source_signature = models.CharField(max_length=64, blank=True)
+    crawl_evidence = models.JSONField(default=dict, blank=True)
     source = models.ForeignKey(Source, on_delete=models.PROTECT)
     key = models.CharField(max_length=180, unique=True)
     trigger = models.CharField(max_length=50)

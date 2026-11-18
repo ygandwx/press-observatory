@@ -80,6 +80,24 @@ def seed():
         else:
             raise AssertionError("Invalid CSV committed")
     paper = Media.objects.get(name="合成甲报")
+    paper.verification = {
+        "record": {
+            "date": "2026-11-18",
+            "facts": [
+                {
+                    "field": "类型",
+                    "value": "样本报纸",
+                    "url": ORIGIN + "/directory",
+                    "basis": "虚构的核验素材，供浏览器验收",
+                    "date": "2026-11-18",
+                }
+            ],
+            "checks": {"类型": "样本核对完成"},
+            "searches": [],
+            "candidates": [],
+        }
+    }
+    paper.save(update_fields=["verification"])
     Source.objects.create(
         name="合成官网", media=paper, url=ORIGIN + "/feed", trusted=True
     )

@@ -493,6 +493,68 @@ function Compare({ id }: { id: number }) {
     </div>
   );
 }
+function Verification({ m }: { m: Media }) {
+  const row = m.verification?.record;
+  if (!row) return null;
+  return (
+    <section className="panel evidence">
+      <h2>公开资料核验</h2>
+      <p className="muted">核验日期　{row.date}</p>
+      {row.facts.map((f, i) => (
+        <details key={i}>
+          <summary>
+            <b>{f.field}</b>　{f.value}
+          </summary>
+          <p>{f.basis}</p>
+          <a href={f.url} target="_blank" rel="noreferrer">
+            查看出处 ↗
+          </a>{" "}
+          <small>{f.date}</small>
+        </details>
+      ))}
+      <details>
+        <summary>各字段核对记录</summary>
+        {Object.entries(row.checks).map(([k, v]) => (
+          <p key={k}>
+            <b>{k}</b>　{v}
+          </p>
+        ))}
+        {row.searches.map((x, i) => (
+          <p key={i}>
+            <a href={x.url} target="_blank" rel="noreferrer">
+              {x.note} ↗
+            </a>
+          </p>
+        ))}
+      </details>
+      {!!m.reviewed_sources?.length && (
+        <>
+          <h3>已配置信源</h3>
+          {m.reviewed_sources.map((s) => (
+            <p key={s.id}>
+              <a href={s.url} target="_blank" rel="noreferrer">
+                {s.name} ↗
+              </a>{" "}
+              · {s.enabled ? (s.scheduled ? "参与定时" : "手动采集") : "停用"}
+            </p>
+          ))}
+        </>
+      )}
+      {!!row.candidates.length && (
+        <details>
+          <summary>候选栏目与核对依据</summary>
+          {row.candidates.map((x, i) => (
+            <p key={i}>
+              <a href={x.url} target="_blank" rel="noreferrer">
+                {x.note} ↗
+              </a>
+            </p>
+          ))}
+        </details>
+      )}
+    </section>
+  );
+}
 export function Archive({ s, id }: { s: Session; id: string }) {
   const data = useData<Media>("media/" + id),
     canEdit = s.rights.includes("edit"),
@@ -600,6 +662,7 @@ export function Archive({ s, id }: { s: Session; id: string }) {
               </div>
             ))}
           </section>
+          <Verification m={m} />
           <section className="panel">
             <div className="section-title">
               <h2>已入库动态历史记录</h2>

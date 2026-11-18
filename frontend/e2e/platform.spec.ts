@@ -158,6 +158,13 @@ test("B03 · 名册预检后的对比、关注、五件套补全与取消", asyn
   await button(page, "关闭对比（2）").click();
   await link(page, "合成甲报").click();
   await expect(heading(page, "合成甲报")).toBeVisible();
+  await expect(heading(page, "公开资料核验")).toBeVisible();
+  await page.locator("summary").filter({ hasText: "样本报纸" }).click();
+  await expect(page.getByText("虚构的核验素材，供浏览器验收")).toBeVisible();
+  await expect(page.getByRole("link", { name: "查看出处 ↗" })).toHaveAttribute(
+    "href",
+    "https://acceptance.invalid/directory",
+  );
   const url = page.url();
   await page.goto(url + "?edit=1");
   await expect(heading(page, "平台矩阵")).toBeVisible();

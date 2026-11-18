@@ -276,6 +276,7 @@ class PlatformTests(TestCase):
             self.assertEqual(Event.objects.get(title=title).state, expected)
 
     def test_restricted_channel_and_due_slots(self):
+        self.source.scheduled = True
         self.source.adapter = "公众号"
         self.source.save()
         now = datetime(2026, 11, 18, 8, tzinfo=ZoneInfo("Asia/Shanghai"))
