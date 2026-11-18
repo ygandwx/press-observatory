@@ -346,6 +346,7 @@ export function ReportDetail({
           <a href={weekly ? "/briefings" : "/summary?history=1"}>← 历史归档</a>
         )}
         <button
+          disabled={a.busy}
           onClick={() =>
             a.run(async () => {
               await navigator.clipboard.writeText(
@@ -370,6 +371,7 @@ export function ReportDetail({
           导出 PDF
         </button>
         <button
+          disabled={a.busy}
           onClick={() =>
             a.run(async () => {
               if (!paper.current) return;
@@ -393,9 +395,12 @@ export function ReportDetail({
         </button>
         {canEdit && r.state === "draft" && (
           <>
-            <button onClick={() => edit(!editing)}>编辑</button>
+            <button disabled={a.busy} onClick={() => edit(!editing)}>
+              编辑
+            </button>
             {!r.history?.length && (
               <button
+                disabled={a.busy}
                 onClick={() =>
                   a.run(async () => {
                     await request("reports", {
@@ -411,7 +416,9 @@ export function ReportDetail({
                 重新生成
               </button>
             )}
-            <button onClick={() => call("submit")}>提交签发</button>
+            <button disabled={a.busy} onClick={() => call("submit")}>
+              提交签发
+            </button>
           </>
         )}
         {sign && ["draft", "pending"].includes(r.state) && (
@@ -425,12 +432,19 @@ export function ReportDetail({
         )}
         {sign && ["published", "archived"].includes(r.state) && (
           <>
-            <button onClick={() => call(r.share ? "revoke" : "share")}>
+            <button
+              disabled={a.busy}
+              onClick={() => call(r.share ? "revoke" : "share")}
+            >
               {r.share ? "撤销分享" : "生成只读链接"}
             </button>
-            <button onClick={() => call("correct")}>创建更正稿</button>
+            <button disabled={a.busy} onClick={() => call("correct")}>
+              创建更正稿
+            </button>
             {r.state === "published" && (
-              <button onClick={() => call("archive")}>归档</button>
+              <button disabled={a.busy} onClick={() => call("archive")}>
+                归档
+              </button>
             )}
           </>
         )}

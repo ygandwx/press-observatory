@@ -347,7 +347,22 @@ test("B07 · 日报取消、保存、签发、导出、匿名分享撤销与历�
   await login(page, "签发");
   await page.goto(path);
   await button(page, "签发").click();
-  await button(page, "生成只读链接").click();
+  const share = button(page, "生成只读链接");
+  await expect(share).toBeVisible();
+  const pendingShare = Promise.withResolvers<void>();
+  await page.route("**/api/v1/reports/*", async (route) => {
+    const req = route.request();
+    if (req.method() === "POST" && req.postDataJSON()?.action === "share")
+      await pendingShare.promise;
+    await route.continue();
+  });
+  try {
+    await share.click();
+    await expect(button(page, "复制全文")).toBeDisabled();
+  } finally {
+    pendingShare.resolve();
+  }
+  await expect(link(page, /打开只读链接/)).toBeVisible();
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
     origin: process.env.ACCEPTANCE_BASE,
   });
