@@ -51,6 +51,8 @@ def source_signature(source):
 
 
 def verified_for_schedule(source):
+    if source.profile.get("documents"):
+        return False
     counts = source.run_set.filter(
         state="done", source_signature=source_signature(source)
     ).values_list("counts", flat=True)
@@ -75,6 +77,33 @@ def schedule(now=None):
         ):
             ids.append(source.pk)
     return enqueue("定时采集", f"schedule:{day}:{slot}", ids)
+
+
+def listing_links(soup, profile):
+    if "embedded_list_selector" in profile:
+        node = soup.select_one(profile["embedded_list_selector"])
+        if node is None:
+            raise ExternalError("未找到栏目公开的 JSON 清单。")
+        try:
+            rows = json.loads(node.get_text(strip=True))
+        except ValueError as exc:
+            raise ExternalError("栏目公开清单格式已变化。") from exc
+        if not isinstance(rows, list):
+            raise ExternalError("栏目清单未返回数组。")
+        for row in rows:
+            if not isinstance(row, dict) or not all(
+                isinstance(row.get(k), str) for k in ("title", "url")
+            ):
+                raise ExternalError("栏目清单缺少可核验的标题或链接。")
+            yield row["title"].strip(), row["url"]
+        return
+    for a in soup.select(profile.get("selector", "a[href]")):
+        if a.get("href"):
+            heading = a.select_one("h1,h2,h3,h4") if profile.get("selector") else None
+            yield (
+                (a.get("title") or (heading or a).get_text(" ", strip=True)).strip(),
+                a["href"],
+            )
 
 
 def adapter_items(source):
@@ -103,8 +132,21 @@ def adapter_items(source):
         ]
     soup = BeautifulSoup(raw, "html.parser")
     check_access_page(soup)
+    if profile.get("documents"):
+        listed = set()
+        for a in soup.select("a[href]"):
+            link = urljoin(landing, a["href"])
+            if link.startswith("http://"):
+                link = "https://" + link[7:]
+            listed.add(link)
+        return [
+            (doc["title"], doc["url"])
+            for doc in profile["documents"]
+            if doc["url"] in listed
+        ][:limit]
     if (
         not profile.get("selector")
+        and not profile.get("embedded_list_selector")
         and soup.h1
         and (
             soup.find("article")
@@ -113,12 +155,11 @@ def adapter_items(source):
     ):
         return [(soup.h1.get_text(" ", strip=True), landing)]
     found = {}
-    for a in soup.select(profile.get("selector", "a[href]")):
-        if not a.get("href"):
+    subjects = profile.get("subject_terms", [])
+    for title, href in listing_links(soup, profile):
+        if subjects and not any(subject in title for subject in subjects):
             continue
-        heading = a.select_one("h1,h2,h3,h4") if profile.get("selector") else None
-        title = (a.get("title") or (heading or a).get_text(" ", strip=True)).strip()
-        url = urljoin(landing, a.get("href", ""))
+        url = urljoin(landing, href)
         if (
             landing.startswith("https://")
             and url.startswith("http://")
@@ -178,13 +219,37 @@ def ingest(source, title, url, rules, counts, run, lease):
     if Article.objects.filter(url=normalize_url(url), events__isnull=False).exists():
         counts["重复"] += 1
         return
-    canonical, headline, body = document(url)
+    crawler = active_crawler.get()
+    target = next(
+        (d for d in source.profile.get("documents", []) if d["url"] == url), None
+    )
+    if target:
+        # Each reviewed destination gets its own host policy; redirects stay on that host.
+        selectors = {k: v for k, v in target.items() if k.endswith("_selector")}
+        article_source = Source(
+            url=url,
+            profile={**selectors, "interval": source.profile.get("interval", 2)},
+        )
+        with guarded(article_source) as article_crawler:
+            try:
+                canonical, headline, body = document(url)
+                if target["title"] not in headline:
+                    raise ExternalError("目录标题与原文标题不一致，需复核。")
+            finally:
+                crawler.audit.update(article_crawler.audit)
+                crawler.published = article_crawler.published
+    else:
+        canonical, headline, body = document(url)
     payload = {
         "title": headline or title,
         "url": canonical,
         "category": next((r.category for r in hits if r.category in EVENTS), "其他类"),
     }
-    crawler = active_crawler.get()
+    if target:
+        publisher = source.coverage_media.filter(name=target["media"]).first()
+        if not publisher:
+            raise ExternalError("年度原文的发布机构尚未核验。")
+        payload["media"] = publisher.pk
     if crawler and crawler.published:
         payload["published"] = crawler.published
     analysis = {}

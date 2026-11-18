@@ -1,0 +1,836 @@
+[
+  {
+    "name": "中国财政杂志社·本社活动",
+    "media": "",
+    "covered": [
+      "中国财政",
+      "财务与会计"
+    ],
+    "regular": true,
+    "url": "https://www.zgcznet.com/shfc/index.html",
+    "profile": {
+      "prefix": "/shfc/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国财政杂志社"
+      ],
+      "title_terms": [
+        "宣传工作",
+        "出版政府奖",
+        "通讯员培训",
+        "调研汇智"
+      ],
+      "publisher": "中国财政杂志社",
+      "cadence": "weekly",
+      "headline_selector": ".container1 h3",
+      "body_selector": "#print_html",
+      "selector": "dd.tit a[href]",
+      "date_selector": ".journal_fu"
+    }
+  },
+  {
+    "name": "海南日报报业集团·机构动态与预决算",
+    "media": null,
+    "covered": [
+      "海南日报"
+    ],
+    "regular": false,
+    "url": "https://www.hndaily.com.cn/",
+    "profile": {
+      "prefix": "/xinwen/show-",
+      "interval": 4,
+      "limit": 5,
+      "subject_terms": [
+        "海南日报社",
+        "海南日报报业集团"
+      ],
+      "title_terms": [
+        "作品入围",
+        "融合转型",
+        "新闻奖",
+        "社会责任报告",
+        "部门决算公开报告",
+        "本级 2025 年度决算公开报告",
+        "部门预算公开报告",
+        "部门预算公开说明"
+      ],
+      "publisher": "海南日报报业集团",
+      "cadence": "weekly",
+      "headline_selector": ".wenzhangTitle h1",
+      "body_selector": ".wenzhangCon",
+      "selector": "ul.list_a a[href]",
+      "date_selector": ".wenzhangTitle"
+    }
+  },
+  {
+    "name": "羊城晚报报业集团·集团动态",
+    "media": null,
+    "covered": [
+      "羊城晚报"
+    ],
+    "regular": false,
+    "url": "https://www.ycwb.com.cn/culture.html",
+    "profile": {
+      "prefix": "/content/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "羊晚集团",
+        "羊城晚报报业集团",
+        "巡视公告"
+      ],
+      "title_terms": [
+        "风险管理",
+        "高质量发展工作会议",
+        "巡视公告",
+        "新春走访"
+      ],
+      "publisher": "羊城晚报报业集团",
+      "cadence": "weekly",
+      "headline_selector": ".article-n .article-title",
+      "body_selector": ".article-cont",
+      "selector": ".list-n-ul a[href]",
+      "date_selector": ".article-infor"
+    }
+  },
+  {
+    "name": "工人日报社·工事公告",
+    "media": "工人日报",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.workercn.cn/gongshi/",
+    "profile": {
+      "prefix": "/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "工人日报社"
+      ],
+      "title_terms": [
+        "采购",
+        "招聘",
+        "新闻奖",
+        "资产",
+        "项目比选"
+      ],
+      "publisher": "工人日报社",
+      "cadence": "weekly",
+      "headline_selector": "h1.ctitle",
+      "body_selector": ".ccontent",
+      "selector": "ul.imglist h3 a[href]",
+      "date_selector": ".signdate .time"
+    }
+  },
+  {
+    "name": "中国青年报社·报社公示",
+    "media": "中国青年报",
+    "covered": [],
+    "regular": true,
+    "url": "https://news.cyol.com/gb/gonggao/9k636m1O/index.html",
+    "profile": {
+      "prefix": "/gb/gonggao/articles/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国青年报社推荐",
+        "中国青年报社公开",
+        "中国青年报社202"
+      ],
+      "title_terms": [
+        "推荐参评",
+        "公开招聘",
+        "采购"
+      ],
+      "publisher": "中国青年报社",
+      "cadence": "weekly",
+      "headline_selector": "h1",
+      "body_selector": "#art_geshi",
+      "selector": "li.news-li h2 a[href]"
+    }
+  },
+  {
+    "name": "中国日报网·招聘公告",
+    "media": null,
+    "covered": [
+      "中国日报"
+    ],
+    "regular": true,
+    "url": "https://cn.chinadaily.com.cn/c/5f59c820a31009ff9fddf6bc/5f59c843a31009ff9fddf6c5",
+    "profile": {
+      "prefix": "/a/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国日报网",
+        "中国日报社"
+      ],
+      "title_terms": [
+        "公开招聘",
+        "招聘公告",
+        "招聘工作人员",
+        "年度招聘"
+      ],
+      "publisher": "中国日报网",
+      "cadence": "weekly",
+      "headline_selector": "h1",
+      "body_selector": "#Content",
+      "selector": ".busBox3 h3 a[href]"
+    }
+  },
+  {
+    "name": "中国旅游报社·通知公告",
+    "media": "中国旅游报",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.ctnews.com.cn/gsjs2023/node_1882.html",
+    "profile": {
+      "prefix": "/gsjs2023/content_",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国旅游报",
+        "《中国旅游报》社"
+      ],
+      "title_terms": [
+        "工资分配",
+        "招聘",
+        "拟聘",
+        "公示",
+        "采购"
+      ],
+      "publisher": "中国旅游报社",
+      "cadence": "weekly",
+      "headline_selector": ".article h1",
+      "body_selector": ".article .content",
+      "selector": "h1.list__title a[href]"
+    }
+  },
+  {
+    "name": "科技日报社·公开招聘",
+    "media": "科技日报",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.stdaily.com/node_355.html",
+    "profile": {
+      "prefix": "/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "科技日报社"
+      ],
+      "title_terms": [
+        "记者站",
+        "公开招聘",
+        "拟聘用"
+      ],
+      "publisher": "科技日报社",
+      "cadence": "weekly",
+      "headline_selector": "h1",
+      "body_selector": "#printContent .content",
+      "selector": ".f_lieb_list h3 a[href]",
+      "date_selector": ".articleHead .time1"
+    }
+  },
+  {
+    "name": "科技日报社·公告公示",
+    "media": "科技日报",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.stdaily.com/web/node_10787.html",
+    "profile": {
+      "prefix": "/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "科技日报社"
+      ],
+      "title_terms": [
+        "社会责任报告",
+        "长江韬奋奖",
+        "中国新闻奖",
+        "推荐人选"
+      ],
+      "publisher": "科技日报社",
+      "cadence": "weekly",
+      "headline_selector": "h1",
+      "body_selector": "#printContent .content",
+      "selector": ".f_lieb_list h3 a[href]",
+      "date_selector": ".articleHead .time1"
+    }
+  },
+  {
+    "name": "人民周刊杂志社·公告",
+    "media": "人民周刊",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.peopleweekly.cn/html/gg/",
+    "profile": {
+      "prefix": "/html/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "人民周刊"
+      ],
+      "title_terms": [
+        "印装",
+        "发行代理",
+        "记者证",
+        "公示",
+        "印刷",
+        "中标",
+        "招标"
+      ],
+      "publisher": "人民周刊杂志社",
+      "cadence": "weekly",
+      "headline_selector": "h1.zhengbiaoti",
+      "body_selector": "#Article .content",
+      "selector": ".hanglie a[href]",
+      "date_selector": ".rexw-ly p"
+    }
+  },
+  {
+    "name": "中国妇女杂志社·预决算及公示",
+    "media": "中国妇女",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.womenofchina.com/zt/",
+    "profile": {
+      "prefix": "/zt/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国妇女杂志社"
+      ],
+      "title_terms": [
+        "部门决算",
+        "年预算",
+        "招聘",
+        "公示"
+      ],
+      "publisher": "中国妇女杂志社",
+      "cadence": "weekly",
+      "headline_selector": ".article_d p.title",
+      "body_selector": ".article_d .main .content",
+      "selector": ".newsList .content a[href]",
+      "date_selector": ".article_d .date .time"
+    }
+  },
+  {
+    "name": "广州日报报业集团·招标公告",
+    "media": null,
+    "covered": [
+      "广州日报"
+    ],
+    "regular": true,
+    "url": "https://news.dayoo.com/guangzhou/154329.shtml",
+    "profile": {
+      "prefix": "/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "广州日报报业集团",
+        "广报集团",
+        "广州日报社"
+      ],
+      "title_terms": [
+        "运营服务",
+        "项目招标",
+        "采购",
+        "中标"
+      ],
+      "publisher": "广州日报报业集团",
+      "cadence": "weekly",
+      "headline_selector": "#wza_hd",
+      "body_selector": "#wza_content",
+      "selector": ".news-item h2 a[href]"
+    }
+  },
+  {
+    "name": "云南日报报业集团·预决算公开",
+    "media": null,
+    "covered": [
+      "云南日报"
+    ],
+    "regular": false,
+    "url": "https://www.yndaily.com/html/juesuangongkai/",
+    "profile": {
+      "prefix": "/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "云南日报报业集团"
+      ],
+      "title_terms": [
+        "部门决算",
+        "部门预算"
+      ],
+      "publisher": "云南日报报业集团",
+      "cadence": "weekly",
+      "headline_selector": ".layer81",
+      "body_selector": ".layer83",
+      "selector": "ul.layer85 li .fl a[href]",
+      "date_selector": ".layer82 .fl:-soup-contains(\"发布时间\")"
+    }
+  },
+  {
+    "name": "广西日报传媒集团·公告公示",
+    "media": null,
+    "covered": [
+      "广西日报"
+    ],
+    "regular": true,
+    "url": "https://www.gxnews.com.cn/staticmores/339/21339-1.shtml",
+    "profile": {
+      "prefix": "/staticpages/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "广西日报传媒集团",
+        "广西日报社"
+      ],
+      "title_terms": [
+        "项目",
+        "采购",
+        "比选",
+        "中标"
+      ],
+      "publisher": "广西日报传媒集团",
+      "cadence": "weekly",
+      "headline_selector": "h1",
+      "body_selector": "#artContent",
+      "selector": "#ul_s21339 li a[href]",
+      "date_selector": ".time.nobr"
+    }
+  },
+  {
+    "name": "江西日报社·公告栏",
+    "media": "江西日报",
+    "covered": [],
+    "regular": true,
+    "url": "https://jiangxi.jxnews.com.cn/bulletin/",
+    "profile": {
+      "prefix": "/system/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "江西日报社",
+        "江西日报传媒集团"
+      ],
+      "title_terms": [
+        "采购",
+        "招聘",
+        "印刷",
+        "中标"
+      ],
+      "publisher": "江西日报社",
+      "cadence": "weekly",
+      "headline_selector": "div.title",
+      "body_selector": "#Zoom",
+      "selector": ".newslist1 dt a[href]",
+      "date_selector": "#pubtime_baidu"
+    }
+  },
+  {
+    "name": "求是杂志社·求是动态",
+    "media": "求是",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.qstheory.cn/dt/index.htm",
+    "profile": {
+      "prefix": "/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "求是杂志社",
+        "求是杂志编委会"
+      ],
+      "title_terms": [
+        "社会责任报告",
+        "巡视整改",
+        "公开招聘",
+        "录用",
+        "新闻奖"
+      ],
+      "publisher": "求是杂志社",
+      "cadence": "weekly",
+      "headline_selector": "h1",
+      "body_selector": "#detailContent",
+      "selector": "ul.wz-list li a[href]"
+    }
+  },
+  {
+    "name": "国家体育总局·中国体育报业总社公告",
+    "media": null,
+    "covered": [
+      "中国体育报"
+    ],
+    "regular": true,
+    "url": "https://www.sport.gov.cn/byzs/n5678/index.html",
+    "profile": {
+      "prefix": "/byzs/n5678/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国体育报业总社"
+      ],
+      "title_terms": [
+        "媒体融合",
+        "法律服务",
+        "出租公告",
+        "招标"
+      ],
+      "publisher": "国家体育总局",
+      "cadence": "weekly",
+      "headline_selector": "td.black18_30",
+      "body_selector": "#zoom",
+      "selector": "td.black14_30 a[href]",
+      "date_selector": "td.grey12_24"
+    }
+  },
+  {
+    "name": "中国水利报社·水利网公告",
+    "media": "中国水利报",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.chinawater.com.cn/gg/",
+    "profile": {
+      "prefix": "/gg/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国水利报社"
+      ],
+      "title_terms": [
+        "招聘",
+        "采编",
+        "新媒体",
+        "参评",
+        "记者证",
+        "评选结果公示",
+        "社会责任报告",
+        "接收落户高校毕业生"
+      ],
+      "publisher": "中国水利报社",
+      "cadence": "weekly",
+      "headline_selector": ".article-container h2",
+      "body_selector": ".article-bottom",
+      "selector": "ul.listpage-ul a[href$=\".html\"]"
+    }
+  },
+  {
+    "name": "健康报社·公示公告",
+    "media": "健康报",
+    "covered": [],
+    "regular": true,
+    "url": "https://www.jkb.com.cn/jkbactivists/index.html",
+    "profile": {
+      "prefix": "/jkbactivists/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "工资总额",
+        "进口新闻纸",
+        "健康中国平台",
+        "报社公开招聘",
+        "报社招聘",
+        "系统升级"
+      ],
+      "title_terms": [
+        "工资总额",
+        "进口新闻纸",
+        "健康中国平台",
+        "招聘",
+        "系统升级"
+      ],
+      "publisher": "健康报社",
+      "cadence": "weekly",
+      "headline_selector": "title",
+      "body_selector": "#ttde_con",
+      "embedded_list_selector": "#ttde_data",
+      "embedded_metadata_selector": "#ttde_info"
+    }
+  },
+  {
+    "name": "新华通讯社·社务公示",
+    "media": "新华社",
+    "covered": [],
+    "regular": false,
+    "url": "https://www.xinhuanet.com/xinhuashe/xxgk.htm",
+    "profile": {
+      "prefix": "/xinhuashe/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "关于新华社",
+        "新华通讯社"
+      ],
+      "title_terms": [
+        "新闻工作者",
+        "招聘",
+        "公示",
+        "年度工作会议"
+      ],
+      "publisher": "新华通讯社",
+      "cadence": "weekly",
+      "headline_selector": "h1 .title",
+      "body_selector": "#detailContent",
+      "selector": ".part_right a[href$=\".html\"]"
+    }
+  },
+  {
+    "name": "浙江日报报业集团·信息公告",
+    "media": null,
+    "covered": [
+      "浙江日报",
+      "钱江晚报"
+    ],
+    "regular": true,
+    "url": "https://www.8531.cn/noticeinfo/",
+    "profile": {
+      "prefix": "/noticeinfo/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [],
+      "title_terms": [
+        "采购",
+        "招租",
+        "招标",
+        "中标",
+        "成交",
+        "项目询价"
+      ],
+      "publisher": "浙江日报报业集团",
+      "cadence": "weekly",
+      "headline_selector": "h2.doc-title",
+      "body_selector": ".html-content",
+      "selector": ".m-list .item a[href]",
+      "date_selector": ".doc-info"
+    }
+  },
+  {
+    "name": "全国工商联·中华工商时报社公示",
+    "media": "中华工商时报",
+    "covered": [],
+    "regular": false,
+    "url": "https://wap.acfic.org.cn/tzgg_13745/tzgs/",
+    "profile": {
+      "prefix": "/tzgg_13745/tzgs/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中华工商时报社"
+      ],
+      "title_terms": [
+        "公开",
+        "招聘",
+        "公示"
+      ],
+      "publisher": "全国工商联",
+      "cadence": "weekly",
+      "headline_selector": "p.title",
+      "body_selector": ".zhengwen",
+      "selector": "ul.zzyy_con_ul a[href]",
+      "date_selector": ".ftit span"
+    }
+  },
+  {
+    "name": "中国记协·2025年度中央媒体责任报告目录",
+    "media": null,
+    "covered": [
+      "中国新闻社",
+      "中国日报",
+      "人民政协报",
+      "学习时报",
+      "新华社",
+      "求是",
+      "科技日报"
+    ],
+    "regular": false,
+    "url": "https://www.xinhuanet.com/zgjx/2019v/mtzrbg/2025bg/index.htm",
+    "profile": {
+      "publisher": "中国记协",
+      "interval": 4,
+      "limit": 7,
+      "title_terms": [
+        "社会责任报告"
+      ],
+      "documents": [
+        {
+          "url": "https://www.news.cn/20260518/905272f970404d49bc1831443918c1d2/c.html",
+          "title": "新华通讯社社会责任报告（2025年度）",
+          "media": "新华社",
+          "headline_selector": "h1",
+          "body_selector": "#detailContent"
+        },
+        {
+          "url": "https://www.qstheory.cn/20260530/0645227d6f1149d482b83682c298949e/c.html",
+          "title": "求是杂志社社会责任报告（2025年度）",
+          "media": "求是",
+          "headline_selector": "h1",
+          "body_selector": "#detailContent"
+        },
+        {
+          "url": "https://cn.chinadaily.com.cn/a/202605/29/WS6a19adb2a310942cc49af1b5.html",
+          "title": "中国日报社会责任报告（2025年度）",
+          "media": "中国日报",
+          "headline_selector": "h1",
+          "body_selector": "#Content"
+        },
+        {
+          "url": "https://www.stdaily.com/web/gdxw/2026-05/31/content_525273.html",
+          "title": "科技日报社社会责任报告（2025年度）",
+          "media": "科技日报",
+          "headline_selector": "h1",
+          "body_selector": "#printContent .content",
+          "date_selector": ".articleHead .time1"
+        },
+        {
+          "url": "https://www.rmzxw.com.cn/c/2026-05-25/3921075.shtml",
+          "title": "人民政协报社会责任报告（2025年度）",
+          "media": "人民政协报",
+          "headline_selector": "h1.Content_title",
+          "body_selector": ".text_box",
+          "date_selector": ".Remark span"
+        },
+        {
+          "url": "https://www.chinanews.com.cn/gn/2026/05-29/10630828.shtml",
+          "title": "中国新闻社社会责任报告(2025年度)",
+          "media": "中国新闻社",
+          "headline_selector": "h1",
+          "body_selector": ".left_zw"
+        },
+        {
+          "url": "https://www.studytimes.cn/jsxx/202605/t20260529_88039.html",
+          "title": "学习时报社会责任报告（2025年度）",
+          "media": "学习时报",
+          "headline_selector": ".font_36",
+          "body_selector": "#detail .TRS_Editor"
+        }
+      ]
+    }
+  },
+  {
+    "name": "上观新闻·2025年度上海媒体责任报告目录",
+    "media": null,
+    "covered": [
+      "澎湃新闻"
+    ],
+    "regular": false,
+    "url": "https://www.shobserver.cn/wx/detail.do?id=1133795",
+    "profile": {
+      "publisher": "上观新闻",
+      "interval": 4,
+      "limit": 1,
+      "title_terms": [
+        "社会责任报告"
+      ],
+      "documents": [
+        {
+          "url": "https://www.thepaper.cn/newsDetail_forward_33281641",
+          "title": "澎湃新闻社会责任报告（2025年度）",
+          "media": "澎湃新闻",
+          "headline_selector": "h1",
+          "body_selector": "div[class^=\"cententWrap\"]",
+          "date_selector": "time"
+        }
+      ]
+    }
+  },
+  {
+    "name": "西藏新闻网·2025年度媒体责任报告目录",
+    "media": null,
+    "covered": [
+      "西藏日报"
+    ],
+    "regular": false,
+    "url": "https://www.xzxw.com/2026zt/node_41983.html",
+    "profile": {
+      "publisher": "西藏新闻网",
+      "interval": 4,
+      "limit": 1,
+      "title_terms": [
+        "社会责任报告"
+      ],
+      "documents": [
+        {
+          "url": "https://www.xzxw.com/xw/xzyw/2026-05/11/content_6789856.html",
+          "title": "西藏日报社社会责任报告（2025年度）",
+          "media": "西藏日报",
+          "headline_selector": "h1 h2",
+          "body_selector": ".xw_daodu_detail",
+          "date_selector": "div:-soup-contains-own(\"来源：西藏日报客户端\")"
+        }
+      ]
+    }
+  },
+  {
+    "name": "群众新闻网·2025年度陕西媒体责任报告目录",
+    "media": null,
+    "covered": [
+      "三秦都市报",
+      "华商报",
+      "陕西日报"
+    ],
+    "regular": false,
+    "url": "https://www.sxdaily.com.cn/node_50474.html",
+    "profile": {
+      "publisher": "群众新闻网",
+      "interval": 4,
+      "limit": 3,
+      "title_terms": [
+        "社会责任报告"
+      ],
+      "documents": [
+        {
+          "url": "https://app.sxdaily.com.cn/sxrbs/site1/mweb/ja9li/content_20031732.html",
+          "title": "2025年度陕西日报社社会责任报告",
+          "media": "陕西日报",
+          "headline_selector": "#title",
+          "body_selector": "#content"
+        },
+        {
+          "url": "https://www.sanqin.com/2026-05/29/content_11614601.html",
+          "title": "三秦都市报社会责任报告 （2025年度）",
+          "media": "三秦都市报",
+          "headline_selector": ".ui-article-title",
+          "body_selector": ".article-content",
+          "date_selector": ".ui-infos-bar time"
+        },
+        {
+          "url": "https://www.huashangtop.com/topi/1/427703.html",
+          "title": "华商报社会责任报告 (2025年度)",
+          "media": "华商报",
+          "headline_selector": ".mainTitle",
+          "body_selector": ".content"
+        }
+      ]
+    }
+  },
+  {
+    "name": "新甘肃·2025年度甘肃媒体责任报告目录",
+    "media": null,
+    "covered": [
+      "甘肃日报"
+    ],
+    "regular": false,
+    "url": "https://xgs.newgscloud.com/pages/2026/06/09/a16afb80cca14c28a12b7cf14a05f330.html?vTime=29733537",
+    "profile": {
+      "publisher": "新甘肃",
+      "interval": 4,
+      "limit": 1,
+      "title_terms": [
+        "社会责任报告"
+      ],
+      "documents": [
+        {
+          "url": "https://xgs.newgscloud.com/pages/2026/05/21/b73b1d4dcc5248b7afb77b49402c9abf.html",
+          "title": "甘肃日报社 甘肃日报报业集团2025年度社会责任报告",
+          "media": "甘肃日报",
+          "headline_selector": ".article-title",
+          "body_selector": "#articleContent"
+        }
+      ]
+    }
+  }
+]

@@ -39,6 +39,14 @@ class Command(BaseCommand):
                     raise ValueError("栏目地址重复或名称无效")
                 seen.add(url)
                 profile = validate_profile(row["profile"])
+                if profile.get("documents"):
+                    owners = {d["media"] for d in profile["documents"]}
+                    if (
+                        owners != set(row.get("covered", []))
+                        or row.get("media")
+                        or row["regular"]
+                    ):
+                        raise ValueError("年度目录须逐篇关联发布单位并保留为手动。")
                 if type(row["regular"]) is not bool:
                     raise ValueError("栏目须明确是否适合定时")
                 direct = (

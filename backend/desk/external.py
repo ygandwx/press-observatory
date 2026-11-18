@@ -179,8 +179,18 @@ def document(url):
                 'meta[property="article:published_time"], meta[name="publishdate" i],meta[name="pubdate" i]'
             )
         )
-        if meta:
-            value = meta.get("content") or meta.get_text(" ", strip=True)
+        value = (meta.get("content") or meta.get_text(" ", strip=True)) if meta else ""
+        if profile.get("embedded_metadata_selector"):
+            node = soup.select_one(profile["embedded_metadata_selector"])
+            try:
+                data = json.loads(node.get_text(strip=True)) if node else None
+                if not isinstance(data, dict) or not isinstance(data.get("title"), str):
+                    raise ValueError()
+                headline = " ".join(data["title"].split())
+                value = str(data.get("crtime") or "")
+            except ValueError as exc:
+                raise ExternalError("原文的公开标题元数据无效。") from exc
+        if value:
             found = re.search(
                 r"(?<!\d)(20\d{2})[-/年.](\d{1,2})[-/月.](\d{1,2})(?!\d)", value
             )

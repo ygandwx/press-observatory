@@ -15,7 +15,7 @@ from protego import Protego
 from soupsieve import compile as compile_selector
 from soupsieve.util import SelectorSyntaxError
 
-from .external import ExternalError, active_crawler, request_once
+from .external import ExternalError, active_crawler, normalize_url, request_once
 from .models import CrawlHost
 
 AGENT = "PressObservatory"
@@ -26,6 +26,8 @@ MAX_WAIT = 180
 def validate_profile(profile):
     if not isinstance(profile, dict) or set(profile) - {
         "selector",
+        "embedded_list_selector",
+        "embedded_metadata_selector",
         "headline_selector",
         "body_selector",
         "date_selector",
@@ -34,10 +36,21 @@ def validate_profile(profile):
         "interval",
         "limit",
         "title_terms",
+        "subject_terms",
+        "documents",
         "publisher",
     }:
         raise ValueError("栏目采集配置无效。")
-    for key in ("selector", "headline_selector", "body_selector", "date_selector"):
+    if "selector" in profile and "embedded_list_selector" in profile:
+        raise ValueError("请选择一种栏目清单结构。")
+    for key in (
+        "selector",
+        "embedded_list_selector",
+        "embedded_metadata_selector",
+        "headline_selector",
+        "body_selector",
+        "date_selector",
+    ):
         if key not in profile:
             continue
         value = profile[key]
@@ -58,11 +71,12 @@ def validate_profile(profile):
         "prefix", "/"
     ).startswith("/"):
         raise ValueError("文章路径前缀应从 / 开始。")
-    terms = profile.get("title_terms", [])
-    if not isinstance(terms, list) or not all(
-        isinstance(t, str) and 0 < len(t) <= 40 for t in terms
-    ):
-        raise ValueError("栏目标题词无效。")
+    for key in ("title_terms", "subject_terms"):
+        terms = profile.get(key, [])
+        if not isinstance(terms, list) or not all(
+            isinstance(t, str) and 0 < len(t.strip()) <= 40 for t in terms
+        ):
+            raise ValueError("栏目标题词无效。")
     if (
         not isinstance(profile.get("publisher", ""), str)
         or len(profile.get("publisher", "")) > 160
@@ -70,6 +84,26 @@ def validate_profile(profile):
         raise ValueError("栏目运营主体无效。")
     if profile.get("cadence", "twice_daily") not in ("twice_daily", "daily", "weekly"):
         raise ValueError("定时周期无效。")
+    if "documents" in profile:
+        docs = profile["documents"]
+        if not isinstance(docs, list) or not 1 <= len(docs) <= 30:
+            raise ValueError("年度目录须列明一至三十篇已核对的原文。")
+        seen = set()
+        for doc in docs:
+            required = {"url", "title", "media", "body_selector", "headline_selector"}
+            if (
+                not isinstance(doc, dict)
+                or not required <= doc.keys()
+                or doc.keys() - required - {"date_selector"}
+            ):
+                raise ValueError("目录原文须列明地址、标题、机构及正文结构。")
+            if not all(isinstance(v, str) and v.strip() for v in doc.values()):
+                raise ValueError("目录原文字段不能为空。")
+            url = normalize_url(doc["url"])
+            if not url.startswith("https://") or url in seen or url != doc["url"]:
+                raise ValueError("请使用独立、规范的 HTTPS 原文地址。")
+            seen.add(url)
+            validate_profile({k: v for k, v in doc.items() if k.endswith("_selector")})
     return profile
 
 

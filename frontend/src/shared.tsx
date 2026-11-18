@@ -25,6 +25,9 @@ export type Media = {
   verification?: {
     record?: {
       date: string;
+      collection_note?: string;
+      review_history?: { field: string; value: string; url: string; basis: string; date: string }[];
+      related_channels?: { field: string; name: string; relationship: string; url: string; note: string }[];
       facts: {
         field: string;
         value: string;
