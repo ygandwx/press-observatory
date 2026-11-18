@@ -6,14 +6,19 @@ from .catalog import PERMISSIONS
 
 
 class Media(models.Model):
+    origin_id = models.UUIDField(null=True, unique=True, editable=False)
+    origin_record = models.JSONField(default=dict, blank=True, editable=False)
+    description = models.TextField(blank=True)
+    archive_status = models.CharField(max_length=40, blank=True)
+    high_priority = models.BooleanField(default=False)
     name = models.CharField(max_length=200, unique=True)
     owner = models.CharField(max_length=240, blank=True)
     level = models.CharField(max_length=40, blank=True)
     category = models.CharField(max_length=80, blank=True)
     subcategory = models.CharField(max_length=80, blank=True)
     region = models.CharField(max_length=80, blank=True)
-    kind = models.CharField(max_length=40, default="报纸")
-    focus = models.CharField(max_length=40, default="常规参照")
+    kind = models.CharField(max_length=40, default="报纸", blank=True)
+    focus = models.CharField(max_length=40, default="常规参照", blank=True)
     tags = models.JSONField(default=list)
     channels = models.JSONField(default=dict)
     digest_section = models.CharField(max_length=40, blank=True)

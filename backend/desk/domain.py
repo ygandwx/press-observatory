@@ -113,6 +113,10 @@ def media_row(m):
             "channels",
             "reference",
             "digest_section",
+            "description",
+            "archive_status",
+            "high_priority",
+            "origin_id",
         )
     }
 

@@ -11,11 +11,13 @@ class Command(BaseCommand):
         parser.add_argument("--public-sources", action="store_true")
 
     def handle(self, *args, **options):
-        for label, code in ROLES.items():
+        for label, codes in ROLES.items():
             group, _ = Group.objects.get_or_create(name=label)
-            group.permissions.add(
-                *Permission.objects.filter(
-                    content_type__app_label="desk", codename__in=["read", code]
+            group.permissions.set(
+                Permission.objects.filter(
+                    content_type__app_label="desk",
+                    content_type__model="media",
+                    codename__in=codes,
                 )
             )
         words = {

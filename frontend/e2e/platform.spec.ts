@@ -120,6 +120,10 @@ test("B02 · 看板下钻、筛选返回、收藏、分页、完整 CSV 与模�
   const csv = await download(page, () => link(page, "导出 CSV").click());
   expect(csv.toString("utf8").trim().split(/\r?\n/)).toHaveLength(27);
   await link(page, "合成分页事件 25").click();
+  const eventURL = page.url();
+  await expect(button(page, "☆ 收藏")).toHaveCount(0);
+  await login(page, "编辑");
+  await page.goto(eventURL);
   await button(page, "☆ 收藏").click();
   await expect(button(page, "取消收藏")).toBeVisible();
   await page.reload();
@@ -137,6 +141,7 @@ test("B02 · 看板下钻、筛选返回、收藏、分页、完整 CSV 与模�
   await expect(link(page, "合成分页事件 00")).toBeVisible();
   await page.reload();
   await expect(heading(page, "已入库动态 · 1")).toBeVisible();
+  await login(page, "阅读");
   await page.goto("/monitor");
   await expect(page.getByText(/此页面不可访问/)).toBeVisible();
   await button(page, "退出").click();
@@ -151,20 +156,23 @@ test("B03 · 名册预检后的对比、关注、五件套补全与取消", asyn
   await button(page, "同业对比（2）").click();
   await expect(page.locator(".comparison h3")).toHaveCount(2);
   await button(page, "关闭对比（2）").click();
-  await link(page, /合成甲报/).click();
+  await link(page, "合成甲报").click();
+  await expect(heading(page, "合成甲报")).toBeVisible();
   const url = page.url();
+  await page.goto(url + "?edit=1");
+  await expect(heading(page, "平台矩阵")).toBeVisible();
+  await expect(button(page, "保存档案")).toHaveCount(0);
+  await expect(button(page, "关注机构")).toHaveCount(0);
+  await login(page, "编辑");
+  await page.goto(url);
   await button(page, "关注机构").click();
   await expect(button(page, "取消关注")).toBeVisible();
   await page.reload();
   await expect(button(page, "取消关注")).toBeVisible();
-  await page.goto(url + "?edit=1");
-  await expect(heading(page, "机构资料")).toBeVisible();
-  await expect(button(page, "保存档案")).toHaveCount(0);
   await page.goto("/archives");
   await page.getByLabel("仅看关注").check();
   await button(page, "筛选").click();
   await expect(heading(page, "机构名册 · 1")).toBeVisible();
-  await login(page, "编辑");
   await page.goto(url);
   await button(page, "编辑与补全").click();
   await page
@@ -242,7 +250,7 @@ test("B04 · 信源与关键词启停、取消编辑、阈值和只读配置", a
   await expect(page.getByLabel("放行门槛")).toHaveValue("70");
   await login(page, "审核");
   await page.goto("/monitor?tab=自动入库设置");
-  await expect(button(page, "保存设置")).toBeDisabled();
+  await expect(button(page, "保存设置")).toBeEnabled();
 });
 
 test("B05 · 真实 worker 消费、去重、巡检重试与记录结论", async ({
@@ -298,7 +306,7 @@ test("B06 · AI 正文与链接录入、失败重试、核验后审核及队列�
   await button(page, "保存至待审核队列").click();
   await expect(heading(page, "合成晚报改版手记")).toBeVisible();
   const url = page.url();
-  await expect(button(page, "批准入库")).toHaveCount(0);
+  await expect(button(page, "批准入库")).toBeVisible();
   await login(page, "审核");
   await page.goto(url);
   await button(page, "批准入库").click();
@@ -341,7 +349,7 @@ test("B07 · 日报取消、保存、签发、导出、匿名分享撤销与历�
   await expect(page.locator(".paper blockquote")).toHaveText("合成签发结论");
   await page.reload();
   await expect(page.locator(".paper blockquote")).toHaveText("合成签发结论");
-  await expect(button(page, "签发")).toHaveCount(0);
+  await expect(button(page, "签发")).toBeVisible();
   await button(page, "提交签发").click();
   await expect(button(page, "编辑")).toHaveCount(0);
   await login(page, "签发");
@@ -448,4 +456,38 @@ test("B08 · 周报已结束周、历史筛选、双版和签发后的阅读", a
     .getByRole("combobox", { name: "状态", exact: true })
     .selectOption("archived");
   await expect(link(page, /全国纸媒业态每周简报 · 第/)).toBeVisible();
+});
+
+test("B09 · 两种账号、平台账号管理和档案分组", async ({ page }) => {
+  await login(page, "阅读");
+  await page.goto("/accounts");
+  await expect(page.getByText(/此页面不可访问/)).toBeVisible();
+  await login(page, "配置");
+  await page.goto("/accounts");
+  await page.getByLabel("新账号").fill("名册查看用户");
+  await page.getByLabel("初始密码").fill(process.env.ACCEPTANCE_PASSWORD!);
+  await button(page, "创建账号").click();
+  await expect(page.getByText("账号已创建", { exact: true })).toBeVisible();
+  const role = page.getByLabel("名册查看用户 的账号类型");
+  await expect(role).toHaveValue("查看人员");
+  await role.selectOption("维护人员");
+  await role
+    .locator("xpath=../..")
+    .getByRole("button", { name: "保存角色" })
+    .click();
+  await page.reload();
+  await expect(role).toHaveValue("维护人员");
+  await page.goto("/archives");
+  await page.getByRole("tab", { name: "分类看板" }).click();
+  await expect(page.locator(".board-row").first()).toBeVisible();
+  await page.locator(".board-row").first().click();
+  await expect(page.getByRole("tab", { name: "总表检索" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("tab", { name: "核心追踪" }).click();
+  await expect(page.getByRole("tab", { name: "核心追踪" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 });

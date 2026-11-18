@@ -11,12 +11,22 @@ export type Catalog = {
 };
 export type Session = {
   username: string;
+  role: string;
   rights: string[];
   catalog: Catalog;
   csrf: string;
 };
 export type Media = {
   digest_section: string;
+  description: string;
+  archive_status: string;
+  high_priority: boolean;
+  origin_id?: string;
+  origin_record?: {
+    url?: string;
+    metadata?: Record<string, { text: string; links: string[][] }>;
+    form?: Record<string, unknown>;
+  };
   id: number;
   name: string;
   owner: string;
@@ -195,18 +205,20 @@ export function Select({
   options,
   onChange,
   empty = "全部",
+  allowEmpty = true,
 }: {
   label: string;
   value: string;
   options: string[];
   empty?: string;
+  allowEmpty?: boolean;
   onChange: (v: string) => void;
 }) {
   return (
     <label>
       {label}
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">{empty}</option>
+        {allowEmpty && <option value="">{empty}</option>}
         {options.map((x) => (
           <option key={x}>{x}</option>
         ))}
