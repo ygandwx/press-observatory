@@ -11,7 +11,7 @@ from . import collection, external
 from .crawl import Crawler, guarded, parse_rules
 from .management.commands.verify_roster import ALL_FIELDS
 from .management_api import SourceSerializer
-from .models import Change, CrawlHost, Media, Run, Source
+from .models import Article, Change, CrawlHost, Media, Run, Source
 
 
 class VerifiedRosterTests(TestCase):
@@ -194,9 +194,15 @@ class CrawlPolicyTests(TestCase):
         )
         Run.objects.create(
             key="current",
+            counts={"命中": 1},
             source=self.src,
             state="done",
             source_signature=collection.source_signature(self.src),
+        )
+        no_article = SourceSerializer(self.src, data={"scheduled": True}, partial=True)
+        self.assertFalse(no_article.is_valid())
+        Article.objects.create(
+            source=self.src, title="样本原文", url="https://press.invalid/article/1"
         )
         form = SourceSerializer(self.src, data={"scheduled": True}, partial=True)
         self.assertTrue(form.is_valid(), form.errors)

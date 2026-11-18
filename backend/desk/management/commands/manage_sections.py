@@ -5,10 +5,10 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from desk.collection import enqueue, source_signature
+from desk.collection import enqueue, verified_for_schedule
 from desk.crawl import validate_profile
 from desk.external import normalize_url
-from desk.models import Article, Change, Media, Source
+from desk.models import Change, Media, Source
 
 
 class Command(BaseCommand):
@@ -86,17 +86,7 @@ class Command(BaseCommand):
                         f"{name} 任务 {enqueue('栏目实测', 'section:' + trial_key, [source.pk])}"
                     )
                 elif schedule and row["regular"] and not source.scheduled:
-                    jobs = source.run_set.filter(
-                        state="done", source_signature=source_signature(source)
-                    )
-                    if (
-                        not source.enabled
-                        or not any(
-                            j.get("命中", 0) > 0
-                            for j in jobs.values_list("counts", flat=True)
-                        )
-                        or not Article.objects.filter(source=source).exists()
-                    ):
+                    if not source.enabled or not verified_for_schedule(source):
                         raise ValueError(
                             f"{name} 的当前配置尚无完成且产出原文的实测结果"
                         )
