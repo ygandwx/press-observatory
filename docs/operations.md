@@ -37,7 +37,7 @@ docker compose exec web python manage.py import_media /tmp/media.csv
 docker compose exec web python manage.py import_media /tmp/media.csv --apply
 ```
 
-CSV 须为 UTF-8，至少包含 `name,reference`；支持 `owner,level,category,subcategory,region,kind,focus`。正式名册由部署方核验，缺项可在档案页补全。
+CSV 须为 UTF-8，至少包含 `name,reference`；支持 `owner,level,category,subcategory,region,kind,focus,digest_section`。正式名册由部署方核验，缺项可在档案页补全。
 
 模型配置使用 `MODEL_BASE_URL`、`MODEL_NAME`、`MODEL_API_KEY`。服务端调用配置端点下的 `/chat/completions`，需要支持 JSON 输出。会发送待抽取内容或可见事件摘要，部署方应选用获准处理这些材料的模型服务。缺配置时显示具体反馈，采集候选保留待审。自动批准初始关闭。
 
@@ -85,3 +85,9 @@ docker compose exec -T db sh -c 'pg_restore --exit-on-error -U "$POSTGRES_USER" 
 ```
 
 使用独立应用配置连接恢复库，核对机构、原文、审核日志、期次、签发版本和来源引用。升级时构建已审核提交，先在恢复库验证迁移和业务测试，再部署到目标环境。回退时应用提交和数据库结构须兼容；如果迁移无法逆转，使用升级前快照恢复到独立数据库并切换服务配置。生产代理、证书、告警接收人与数据保留期限由部署方配置。
+
+### 历史快照和归栏资料
+
+数据库迁移 `0003` 增加账号专属的看板和检索快照、分批检索进度及机构日报归栏字段。备份与恢复包含这些表，容量监测应覆盖历史快照。升级前只带 `as_of` 的书签没有当时的来源及归并关系，打开会提示从看板生成新链接。升级前的签发期次继续使用原存档。
+
+市场化纸媒可在机构档案或 CSV 的 `digest_section` 填写“地方商业报”或“晚报类”，用 `reference` 保存支持该归栏的资料网址。编辑应核对出处内容。资料暂缺时将归栏留空，日报会列出待核事件。

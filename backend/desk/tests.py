@@ -8,7 +8,7 @@ from django.contrib.auth.models import User, Group
 from django.core.management import call_command
 from django.utils import timezone
 from rest_framework.test import APIClient
-from .models import Event, Media, Run, Source, Policy, Article, Edition, Change
+from .models import Event, Media, Run, Source, Policy, Article, Edition, Change, Report
 from .domain import record, review
 from .collection import enqueue, schedule, work_once
 from .external import ExternalError, fetch
@@ -412,3 +412,373 @@ class PlatformTests(TestCase):
         rows = viewer.get("/api/v1/events", card["filters"]).json()
         self.assertEqual(rows["count"], card["value"])
         self.assertEqual(rows["items"][0]["id"], first.id)
+
+    def test_historical_drill_survives_merge_split_and_archive_edits(self):
+        parent, child = self.approved(1), self.approved(2)
+        viewer, reviewer = self.use("阅读"), self.use("审核")
+
+        def card():
+            return viewer.get("/api/v1/dashboard").json()["cards"][0]
+
+        def rows(card, **extra):
+            return viewer.get("/api/v1/events", {**card["filters"], **extra}).json()
+
+        before = card()
+        baseline = rows(before)
+        self.assertEqual(baseline["count"], 2)
+        self.assertEqual(card()["filters"], before["filters"])
+        for action in ("merge", "split"):
+            child.refresh_from_db()
+            r = self.post(
+                reviewer,
+                f"events/{child.pk}",
+                {"target": parent.pk, "version": child.version, "action": action},
+            )
+            self.assertEqual(r.status_code, 200)
+            if action == "merge":
+                merged = card()
+                self.assertEqual(merged["value"], 1)
+                self.assertEqual(len(rows(merged)["items"][0]["articles"]), 2)
+            self.assertEqual(rows(before), baseline)
+        self.assertEqual(card()["value"], 2)
+        self.assertEqual(rows(merged)["count"], 1)
+        self.media.region = "新区域"
+        self.media.save()
+        self.assertEqual(rows(before, region="示例省")["count"], 2)
+        self.assertEqual(rows(card(), region="示例省")["count"], 0)
+        page = rows(before, size=1, page=2)
+        self.assertEqual(page["items"], baseline["items"][1:])
+        csv = viewer.get(
+            "/api/v1/events", {**before["filters"], "export": "csv"}
+        ).content.decode()
+        self.assertIn(child.articles.get().url, csv)
+        self.assertIn(parent.articles.get().url, csv)
+        self.assertEqual(
+            reviewer.get("/api/v1/events", before["filters"]).status_code, 404
+        )
+        self.assertEqual(
+            viewer.get(
+                "/api/v1/events", {"as_of": timezone.now().isoformat()}
+            ).status_code,
+            400,
+        )
+
+    def test_historical_queue_and_media_verify_current_permissions(self):
+        pending = self.candidate(3)
+        reviewer = self.use("审核")
+        media = self.media
+        media.focus = "重点关注"
+        media.save()
+        cards = reviewer.get("/api/v1/dashboard").json()["cards"]
+        old_queue, old_archive = cards[1], cards[3]
+        self.assertEqual(old_queue["value"], 1)
+        self.assertEqual(old_archive["value"], 1)
+        media.focus = "常规参照"
+        media.save()
+        review(
+            self.users["审核"],
+            [{"id": pending.pk, "version": pending.version}],
+            "approve",
+        )
+        self.assertEqual(
+            reviewer.get("/api/v1/events", old_queue["filters"]).json()["items"][0][
+                "state"
+            ],
+            "pending",
+        )
+        self.assertEqual(
+            reviewer.get("/api/v1/media", old_archive["filters"]).json()["items"][0][
+                "focus"
+            ],
+            "重点关注",
+        )
+        self.assertEqual(
+            reviewer.get(
+                "/api/v1/events", {**old_archive["filters"], "state": "media"}
+            ).status_code,
+            400,
+        )
+        new = reviewer.get("/api/v1/dashboard").json()["cards"]
+        self.assertEqual([new[i]["value"] for i in (1, 3)], [0, 0])
+        self.users["审核"].groups.set([Group.objects.get(name="阅读")])
+        self.assertEqual(
+            reviewer.get("/api/v1/events", old_queue["filters"]).status_code, 403
+        )
+        self.assertEqual(
+            reviewer.get(
+                "/api/v1/events", {**old_queue["filters"], "state": "approved"}
+            ).status_code,
+            404,
+        )
+
+    def test_six_daily_sections_keep_original_evidence_and_unknowns(self):
+        editor = self.use("编辑")
+        market = "头部市场化纸媒"
+        cases = [
+            ("中央级主流媒体", "中央机关党报党刊", "中央党报党刊"),
+            ("地方党媒体系", "省级党委机关报", "地方党报"),
+            ("中央级主流媒体", "中央行业专业报", "行业专业报"),
+            (market, "都市报晚报", "地方商业报"),
+            (market, "都市报晚报", "晚报类"),
+            ("中央级主流媒体", "中央重点传媒期刊", "重点传媒期刊"),
+        ]
+        expected = [x[2] for x in cases]
+        members = {}
+        sources = {}
+        for i, (category, sub, section) in enumerate(cases):
+            media = Media.objects.create(
+                name=f"合成机构 {i}",
+                category=category,
+                subcategory=sub,
+                reference=f"https://example.org/type/{i}",
+                digest_section=section if category == market else "",
+            )
+            event = self.approved(20 + i)
+            event.media.set([media])
+            members[section] = event.pk
+            sources[event.pk] = event.articles.get().url
+        unknown = self.approved(80)
+        unknown_media = Media.objects.create(
+            name="合成未核实晚报", category=market, subcategory="都市报晚报"
+        )
+        unknown.media.set([unknown_media])
+        no_media = self.approved(81)
+        no_media.media.clear()
+        report = self.post(editor, "reports", {"kind": "daily"}).json()
+        content = report["content"]
+        self.assertEqual(content["section_order"], expected)
+        self.assertEqual(
+            content["section_events"], {s: [p] for s, p in members.items()}
+        )
+        self.assertEqual(
+            {e["id"]: e["media"] for e in content["unclassified"]},
+            {unknown.id: [unknown_media.name], no_media.id: []},
+        )
+        evidence = {e["id"]: e for e in content["events"]}
+        for section, pk in members.items():
+            self.assertEqual(evidence[pk]["sources"], [sources[pk]])
+            self.assertEqual(len(content["categories"][section]), 1)
+        market_proof = evidence[members["晚报类"]]["classification_sources"]
+        self.assertEqual(
+            market_proof,
+            [
+                {
+                    "media": "合成机构 4",
+                    "section": "晚报类",
+                    "url": "https://example.org/type/4",
+                }
+            ],
+        )
+        signed = self.post(
+            self.use("签发"),
+            f"reports/{report['id']}",
+            {"action": "issue", "version": report["version"]},
+        ).json()
+        Media.objects.filter(category=market).update(digest_section="", reference="")
+        self.assertEqual(
+            self.use("阅读").get(f"/api/v1/reports/{report['id']}").json()["content"],
+            signed["content"],
+        )
+
+    def test_daily_empty_sections_priority_and_editor_evidence_validation(self):
+        editor = self.use("编辑")
+        media_path = f"/api/v1/media/{self.media.pk}"
+        changes = {
+            "digest_section": "地方商业报",
+            "category": "头部市场化纸媒",
+            "subcategory": "都市报晚报",
+        }
+        self.assertEqual(
+            editor.patch(media_path, changes, format="json").status_code, 400
+        )
+        self.assertEqual(
+            editor.patch(
+                media_path,
+                {**changes, "reference": "https://example.org/verified-type"},
+                format="json",
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            editor.patch(
+                media_path,
+                {"category": "地方党媒体系", "subcategory": "省级党委机关报"},
+                format="json",
+            ).status_code,
+            400,
+        )
+        top = self.approved(10)
+        Event.objects.filter(pk=top.pk).update(
+            importance="核心", summary="核心事件摘要"
+        )
+        self.approved(11)
+        self.approved(12)
+        data = self.post(editor, "reports", {"kind": "daily"}).json()
+        c = data["content"]
+        self.assertEqual(len(c["categories"]["地方商业报"]), 2)
+        self.assertEqual(c["categories"]["地方商业报"][0], "核心事件摘要")
+        self.assertEqual(c["categories"]["晚报类"], [])
+        self.assertEqual(
+            self.post(
+                editor,
+                f"reports/{data['id']}",
+                {
+                    "action": "edit",
+                    "categories": {**c["categories"], "地方商业报": ["一", "二", "三"]},
+                    "version": data["version"],
+                },
+            ).status_code,
+            400,
+        )
+
+    def test_search_entire_filtered_set_and_more_than_500_matches(self):
+        viewer = self.use("阅读")
+        now = timezone.now()
+        events = Event.objects.bulk_create(
+            [
+                Event(
+                    title=f"合成检索 {i}",
+                    state="approved",
+                    approved=now,
+                    category="技术类",
+                )
+                for i in range(523)
+            ]
+        )
+        self.approved(999)
+        target = events[0]
+        visited = []
+
+        def last_only(prompt, material):
+            batch = [e["id"] for e in material["events"]]
+            visited.extend(batch)
+            return {"ids": [target.pk, 999999] if target.pk in batch else []}
+
+        data = {"q": "目标", "filters": {"category": "技术类"}}
+        with patch("desk.events_api.analyze", side_effect=last_only):
+            run = self.post(viewer, "events/search", data).json()
+        self.assertEqual(visited, [e.pk for e in reversed(events)])
+        self.assertEqual(run["scanned"], 523)
+        self.assertEqual(run["ids"], [target.pk])
+        with patch(
+            "desk.events_api.analyze",
+            side_effect=lambda _, m: {"ids": [e["id"] for e in m["events"]]},
+        ):
+            result = self.post(viewer, "events/search", {**data, "q": "全部"}).json()[
+                "snapshot"
+            ]
+        page = viewer.get(
+            "/api/v1/events", {"result": result, "size": 100, "page": 6}
+        ).json()
+        self.assertEqual(page["count"], 523)
+        self.assertEqual(len(page["items"]), 23)
+        self.assertEqual(page["items"][-1]["id"], target.pk)
+        csv = viewer.get(
+            "/api/v1/events", {"result": result, "export": "csv"}
+        ).content.decode()
+        self.assertEqual(len(csv.splitlines()), 524)
+        self.assertEqual(
+            self.use("编辑").get("/api/v1/events", {"result": result}).status_code, 404
+        )
+
+    def test_partial_search_failure_and_retry_do_not_publish_partial_hits(self):
+        viewer = self.use("阅读")
+        now = timezone.now()
+        Event.objects.bulk_create(
+            [
+                Event(title=f"合成 {i}", state="approved", approved=now)
+                for i in range(65)
+            ]
+        )
+        with patch("desk.events_api.analyze", return_value={"ids": []}) as api:
+            first = self.post(
+                viewer, "events/search", {"q": "合成", "incremental": True}
+            ).json()
+            self.assertFalse(first["complete"])
+            self.assertIsNone(first["snapshot"])
+            step = {"search": first["search"], "incremental": True}
+            self.assertEqual(
+                self.post(viewer, "events/search", {**step, "cursor": 0}).json(), first
+            )
+            self.assertEqual(api.call_count, 1)
+        self.approved(882)
+        with patch(
+            "desk.events_api.analyze", side_effect=ExternalError("模型暂不可用")
+        ):
+            fail = self.post(
+                viewer, "events/search", {**step, "cursor": first["scanned"]}
+            )
+        self.assertEqual(fail.status_code, 400)
+        self.assertIn("检索未完成（50/65）", str(fail.json()))
+        self.assertEqual(
+            self.post(
+                self.use("编辑"), "events/search", {**step, "cursor": 50}
+            ).status_code,
+            404,
+        )
+        with patch("desk.events_api.analyze", return_value={"ids": []}) as api:
+            done = self.post(viewer, "events/search", {**step, "cursor": 50}).json()
+            self.assertTrue(done["complete"])
+            self.assertEqual(done["total"], 65)
+            self.assertEqual(len(api.call_args.args[1]["events"]), 15)
+        self.assertEqual(
+            self.post(
+                viewer, "events/search", {**step, "cursor": 50, "search": "无效"}
+            ).status_code,
+            404,
+        )
+
+    def test_legacy_signed_layout_and_new_multi_institution_digest(self):
+        editor, signer, reader = self.use("编辑"), self.use("签发"), self.use("阅读")
+        day = timezone.localdate() - timedelta(days=2)
+        legacy = {
+            "headline": "历史样稿",
+            "categories": {
+                "中央级主流媒体": ["原摘要"],
+                "地方党媒体系": [],
+                "头部市场化纸媒": [],
+            },
+        }
+        old = Report.objects.create(kind="daily", day=day, content=legacy)
+        path = f"reports/{old.pk}"
+        issued = self.post(
+            signer, path, {"action": "issue", "version": old.version}
+        ).json()
+        response = self.post(
+            editor,
+            "reports",
+            {
+                "kind": "daily",
+                "day": str(day),
+                "regenerate": True,
+                "version": issued["version"],
+            },
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(reader.get("/api/v1/" + path).json()["content"], legacy)
+        self.media.subcategory = "省级党委机关报"
+        self.media.save()
+        parent, child = self.approved(42), self.approved(43)
+        child.media.set(
+            [
+                Media.objects.create(
+                    name="合成期刊",
+                    category="中央级主流媒体",
+                    subcategory="中央重点传媒期刊",
+                )
+            ]
+        )
+        response = self.post(
+            self.use("审核"),
+            f"events/{child.pk}",
+            {"action": "merge", "target": parent.pk, "version": child.version},
+        )
+        self.assertEqual(response.status_code, 200)
+        c = self.post(editor, "reports", {"kind": "daily"}).json()["content"]
+        self.assertEqual(c["snapshot"]["本期入库"], 1)
+        self.assertEqual(c["section_events"]["地方党报"], [parent.pk])
+        self.assertEqual(c["section_events"]["重点传媒期刊"], [parent.pk])
+        self.assertCountEqual(
+            c["events"][0]["sources"],
+            [parent.articles.get().url, child.articles.get().url],
+        )

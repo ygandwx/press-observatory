@@ -23,6 +23,7 @@ type Entry = {
   category: string;
   media: string[];
   sources: string[];
+  classification_sources?: { media: string; section: string; url: string }[];
 };
 type Content = {
   start: string;
@@ -30,6 +31,9 @@ type Content = {
   headline: string;
   key_changes: string[];
   categories: Record<string, string[]>;
+  section_order?: string[];
+  section_events?: Record<string, number[]>;
+  unclassified?: { id: number; media: string[] }[];
   special: Record<string, string[]>;
   snapshot: Record<string, number>;
   events: Entry[];
@@ -211,7 +215,12 @@ function Edit({ r, finish }: { r: Report; finish: () => void }) {
             version: r.version,
             headline,
             key_changes: key.split("\n").filter(Boolean),
-            categories: cats,
+            categories: Object.fromEntries(
+              Object.entries(cats).map(([k, v]) => [
+                k,
+                v.map((x) => x.trim()).filter(Boolean),
+              ]),
+            ),
             special: spec,
           });
           finish();
@@ -232,11 +241,14 @@ function Edit({ r, finish }: { r: Report; finish: () => void }) {
       {[cats, spec].map((group, i) => (
         <fieldset key={i}>
           <legend>{i ? "专项清单" : "分类摘要"}</legend>
-          {Object.entries(group).map(([k, arr]) => (
+          {(i === 0 && r.content.section_order
+            ? r.content.section_order
+            : Object.keys(group)
+          ).map((k) => (
             <label key={k}>
               {k}
               <textarea
-                value={arr.join("\n")}
+                value={group[k].join("\n")}
                 onChange={(e) =>
                   (i ? setSpec : setCats)({
                     ...group,
@@ -434,12 +446,28 @@ export function ReportDetail({
         <h2>一、关键变化</h2>
         {list(c.key_changes, "本期暂无关键变化")}
         <h2>二、分类摘要</h2>
-        {Object.entries(c.categories).map(([k, v]) => (
+        {(c.section_order || Object.keys(c.categories)).map((k) => (
           <div key={k}>
             <h3>{k}</h3>
-            {list(v, "本期暂无该类动态")}
+            {list(c.categories[k], "本期暂无该类动态")}
+            {c.section_events?.[k]?.map((id) => (
+              <a key={id} href={"#event-" + id}>
+                生成时依据 #{id}　
+              </a>
+            ))}
           </div>
         ))}
+        {!!c.unclassified?.length && (
+          <details>
+            <summary>待核验归栏 · {c.unclassified.length} 件</summary>
+            {c.unclassified.map((x) => (
+              <p key={x.id}>
+                <a href={"#event-" + x.id}>事件 #{x.id}</a> ·{" "}
+                {x.media.join("、") || "未关联机构"}
+              </p>
+            ))}
+          </details>
+        )}
         <h2>三、专项清单</h2>
         {Object.entries(c.special).map(([k, v]) => (
           <div key={k}>
@@ -460,7 +488,7 @@ export function ReportDetail({
         </div>
         <h2>{weekly && mode === "业务详版" ? "事件明细与原文" : "事件依据"}</h2>
         {c.events.map((e) => (
-          <div className="reference" key={e.id}>
+          <div className="reference" key={e.id} id={"event-" + e.id}>
             <b>{e.title}</b>
             {weekly && mode === "业务详版" && (
               <p>
@@ -468,6 +496,16 @@ export function ReportDetail({
               </p>
             )}
             <div>
+              {e.classification_sources?.map((ref) => (
+                <a
+                  key={ref.media}
+                  href={ref.url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {ref.media} · {ref.section}归栏出处 ↗　
+                </a>
+              ))}
               {e.sources.map((x, i) => (
                 <a key={x} href={x} rel="noreferrer" target="_blank">
                   原文 {i + 1} ↗　

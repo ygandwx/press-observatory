@@ -9,7 +9,16 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError, NotFound
 from rest_framework.views import exception_handler as drf_handler
-from .catalog import ROLES, EVENTS, CATEGORIES, CHANNELS, FOCUS, LEVELS, IMPORTANCE
+from .catalog import (
+    MARKET_SECTIONS,
+    ROLES,
+    EVENTS,
+    CATEGORIES,
+    CHANNELS,
+    FOCUS,
+    LEVELS,
+    IMPORTANCE,
+)
 from .domain import require
 from .external import ExternalError
 
@@ -48,6 +57,7 @@ def session(req):
             "csrf": get_token(req),
             "catalog": {
                 "events": EVENTS,
+                "market_sections": MARKET_SECTIONS,
                 "categories": CATEGORIES,
                 "channels": CHANNELS,
                 "focus": FOCUS,

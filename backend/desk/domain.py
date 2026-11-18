@@ -2,7 +2,6 @@ from datetime import date
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import ValidationError, PermissionDenied, APIException
 from .models import Event, Article, Change, Media
 from .catalog import EVENTS, IMPORTANCE
@@ -41,25 +40,23 @@ def check_version(obj, value):
         raise Conflict()
 
 
-def query_events(user, filters):
-    state = filters.get("state") or "approved"
+def check_state(user, state):
     if state not in ("approved", "pending", "rejected", "filtered"):
         raise ValidationError("无效的审核状态。")
     if state != "approved" and not (
         user.has_perm("desk.edit") or user.has_perm("desk.review")
     ):
         raise PermissionDenied()
-    qs = Event.objects.filter(merged_into=None, state=state)
-    if filters.get("as_of"):
-        try:
-            cutoff = parse_datetime(str(filters["as_of"]))
-            if not cutoff or timezone.is_naive(cutoff):
-                raise ValueError
-        except ValueError:
-            raise ValidationError("统计截止时间无效。")
-        qs = qs.filter(
-            **{("approved__lte" if state == "approved" else "created__lte"): cutoff}
+
+
+def query_events(user, filters):
+    state = filters.get("state") or "approved"
+    check_state(user, state)
+    if filters.get("as_of") or filters.get("snapshot"):
+        raise ValidationError(
+            "历史查询须使用已保存的快照。旧版时间链接请从看板重新打开。"
         )
+    qs = Event.objects.filter(merged_into=None, state=state)
     for key, field in {
         "category": "category",
         "subtype": "subtype",
@@ -94,6 +91,7 @@ def query_events(user, filters):
             Q(title__icontains=q)
             | Q(summary__icontains=q)
             | Q(media__name__icontains=q)
+            | Q(merged__media__name__icontains=q)
         )
     return qs.distinct()
 
@@ -114,6 +112,7 @@ def media_row(m):
             "tags",
             "channels",
             "reference",
+            "digest_section",
         )
     }
 
@@ -133,6 +132,7 @@ def event_row(e, user=None):
         "importance": e.importance,
         "occurred": e.occurred,
         "approved": e.approved,
+        "approval_day": str(timezone.localdate(e.approved)) if e.approved else None,
         "state": e.state,
         "auto": e.auto,
         "tags": e.tags,
@@ -141,9 +141,20 @@ def event_row(e, user=None):
         "version": e.version,
         "creator": e.creator,
         "created": e.created,
-        "starred": bool(user and e.stars.filter(id=user.pk).exists()),
+        "starred": e.viewer_star
+        if hasattr(e, "viewer_star")
+        else bool(user and e.stars.filter(id=user.pk).exists()),
         "media": [
-            {"id": m.id, "name": m.name, "region": m.region, "category": m.category}
+            {
+                "id": m.id,
+                "name": m.name,
+                "region": m.region,
+                "category": m.category,
+                "subcategory": m.subcategory,
+                "focus": m.focus,
+                "digest_section": m.digest_section,
+                "reference": m.reference,
+            }
             for m in media.values()
         ],
         "articles": [

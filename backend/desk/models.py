@@ -1,3 +1,4 @@
+import uuid
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -15,6 +16,7 @@ class Media(models.Model):
     focus = models.CharField(max_length=40, default="常规参照")
     tags = models.JSONField(default=list)
     channels = models.JSONField(default=dict)
+    digest_section = models.CharField(max_length=40, blank=True)
     reference = models.URLField(max_length=1500, blank=True)
     updated = models.DateTimeField(auto_now=True)
     followers = models.ManyToManyField(
@@ -153,3 +155,22 @@ class Insight(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     content = models.TextField()
     event_ids = models.JSONField(default=list)
+
+
+class FrozenList(models.Model):
+    id = models.CharField(max_length=64, primary_key=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    scope = models.CharField(max_length=20)
+    rows = models.JSONField()
+    created = models.DateTimeField(auto_now_add=True)
+
+
+class SemanticRun(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    candidates = models.ForeignKey(FrozenList, on_delete=models.CASCADE)
+    question = models.TextField()
+    cursor = models.PositiveIntegerField(default=0)
+    matched = models.JSONField(default=list)
+    result = models.ForeignKey(
+        FrozenList, null=True, related_name="+", on_delete=models.CASCADE
+    )

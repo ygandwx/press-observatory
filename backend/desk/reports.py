@@ -5,8 +5,43 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from .models import Event, Media, Report, Edition, Change
-from .catalog import CATEGORIES
+from .catalog import CATEGORIES, DIGEST_SECTIONS, DIGEST_BY_SUBCATEGORY, MARKET_SECTIONS
 from .domain import event_row, require, check_version, Conflict
+
+
+def daily_sections(rows):
+    categories = {name: [] for name in DIGEST_SECTIONS}
+    evidence = {name: [] for name in DIGEST_SECTIONS}
+    unresolved = []
+    for row in rows:
+        assigned = set()
+        unknown = []
+        for m in row["media"]:
+            group = None
+            if m["subcategory"] in CATEGORIES.get(m["category"], ()):
+                group = DIGEST_BY_SUBCATEGORY.get(m["subcategory"])
+            if (
+                m["category"] == "头部市场化纸媒"
+                and m["digest_section"] in MARKET_SECTIONS
+                and m["reference"]
+            ):
+                group = m["digest_section"]
+            if group:
+                assigned.add(group)
+            else:
+                unknown.append(m["name"])
+        if unknown or not row["media"]:
+            unresolved.append({"id": row["id"], "media": unknown})
+        for name in assigned:
+            if len(categories[name]) < 2:
+                categories[name].append(row["summary"] or row["title"])
+                evidence[name].append(row["id"])
+    return {
+        "categories": categories,
+        "section_order": list(DIGEST_SECTIONS),
+        "section_events": evidence,
+        "unclassified": unresolved,
+    }
 
 
 def build_content(kind, day):
@@ -18,7 +53,7 @@ def build_content(kind, day):
         Event.objects.filter(
             state="approved", merged_into=None, approved__date__range=(start, end)
         )
-        .prefetch_related("media", "articles", "merged")
+        .prefetch_related("media", "articles", "merged__media", "merged__articles")
         .order_by("-approved", "pk")
     )
     rows = [event_row(e) for e in selected]
@@ -35,6 +70,23 @@ def build_content(kind, day):
             "subtype": r["subtype"],
             "media": [m["name"] for m in r["media"]],
             "sources": [a["url"] for a in r["articles"]],
+            **(
+                {
+                    "classification_sources": [
+                        {
+                            "media": m["name"],
+                            "section": m["digest_section"],
+                            "url": m["reference"],
+                        }
+                        for m in r["media"]
+                        if m["category"] == "头部市场化纸媒"
+                        and m["digest_section"] in MARKET_SECTIONS
+                        and m["reference"]
+                    ]
+                }
+                if kind == "daily"
+                else {}
+            ),
         }
         for r in rows
     ]
@@ -48,12 +100,20 @@ def build_content(kind, day):
         )
         + "。"
     )
-    classified = {
-        cat: [
-            r["title"] for r in rows if any(m["category"] == cat for m in r["media"])
-        ][:2]
-        for cat in CATEGORIES
-    }
+    report_sections = (
+        daily_sections(rows)
+        if kind == "daily"
+        else {
+            "categories": {
+                cat: [
+                    r["title"]
+                    for r in rows
+                    if any(m["category"] == cat for m in r["media"])
+                ][:2]
+                for cat in CATEGORIES
+            }
+        }
+    )
     watch = {
         "停刊休刊": ["停刊", "休刊"],
         "合并调整": ["合并", "整合"],
@@ -72,7 +132,7 @@ def build_content(kind, day):
         "end": str(end),
         "headline": headline,
         "key_changes": [r["title"] for r in rows[:5]],
-        "categories": classified,
+        **report_sections,
         "special": special,
         "snapshot": {
             "本期入库": len(rows),
@@ -139,6 +199,11 @@ def report_action(user, pk, action, data):
                         and all(
                             isinstance(arr, list)
                             and all(isinstance(v, str) for v in arr)
+                            and (
+                                key != "categories"
+                                or "section_order" not in r.content
+                                or len(arr) <= 2
+                            )
                             for arr in val.values()
                         )
                     )

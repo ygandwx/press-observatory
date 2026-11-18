@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 export type Dict = Record<string, string>;
 export type Catalog = {
+  market_sections: string[];
   events: Record<string, string[]>;
   categories: Record<string, string[]>;
   channels: string[];
@@ -15,6 +16,7 @@ export type Session = {
   csrf: string;
 };
 export type Media = {
+  digest_section: string;
   id: number;
   name: string;
   owner: string;

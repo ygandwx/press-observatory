@@ -36,6 +36,7 @@ function MediaForm({
           "kind",
           "focus",
           "reference",
+          "digest_section",
         ].map((k) => [
           k,
           initial ? String(initial[k as keyof Media] || "") : "",
@@ -46,7 +47,11 @@ function MediaForm({
     [channels, setChannels] = useState<Dict>({ ...initial?.channels }),
     a = useAction();
   const setter = (k: string, v: string) =>
-    set({ ...f, [k]: v, ...(k === "category" ? { subcategory: "" } : {}) });
+    set({
+      ...f,
+      [k]: v,
+      ...(k === "category" ? { subcategory: "", digest_section: "" } : {}),
+    });
   return (
     <form
       className="panel filters"
@@ -100,6 +105,15 @@ function MediaForm({
           onChange={(v) => setter(k, v)}
         />
       ))}
+      {f.category === "头部市场化纸媒" && (
+        <Select
+          label="日报归栏（据资料出处核验）"
+          empty="待核验"
+          options={s.catalog.market_sections}
+          value={f.digest_section || ""}
+          onChange={(v) => setter("digest_section", v)}
+        />
+      )}
       <Field label="垂直领域（顿号分隔）" value={tags} onChange={setTags} />
       {s.catalog.channels.map((c) => (
         <Field
@@ -206,6 +220,14 @@ export function Archives({ s }: { s: Session }) {
           </a>
         </div>
       </form>
+      {active.snapshot && (
+        <p className="muted">
+          正在查看生成时保存的机构名册。{" "}
+          <a href={url("/archives", { ...active, snapshot: "", page: "1" })}>
+            查看实时名册
+          </a>
+        </p>
+      )}
       {!d.data || d.error ? (
         <Wait error={d.error} retry={d.refresh} />
       ) : (

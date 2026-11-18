@@ -37,6 +37,7 @@ class Command(BaseCommand):
                     "kind",
                     "focus",
                     "reference",
+                    "digest_section",
                 )
                 and v
             }

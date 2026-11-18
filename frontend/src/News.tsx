@@ -28,6 +28,7 @@ export function News({
       pending ? { state: "pending" } : { ...query },
     ),
     [ai, setAi] = useState(""),
+    [progress, setProgress] = useState(""),
     [selected, setSelected] = useState<number[]>([]),
     [reason, setReason] = useState("");
   const [active, setActive] = useState<Dict>(
@@ -91,12 +92,35 @@ export function News({
         onSubmit={(e) => {
           e.preventDefault();
           void a.run(async () => {
-            const filters = { ...f, q: "", page: "1" };
-            const r = await request<{ ids: number[] }>("events/search", {
-              q: ai,
-              filters,
-            });
-            apply({ ...filters, ids: r.ids.join(",") || "0" });
+            const filters = { ...f, result: "", ids: "", page: "1" };
+            type Batch = {
+              search: string;
+              scanned: number;
+              total: number;
+              complete: boolean;
+              snapshot: string;
+            };
+            setProgress("正在检索全部符合条件的事件…");
+            try {
+              let r = await request<Batch>("events/search", {
+                q: ai,
+                filters,
+                incremental: true,
+              });
+              while (!r.complete) {
+                setProgress("正在检索 " + r.scanned + " / " + r.total + " 件");
+                r = await request<Batch>("events/search", {
+                  search: r.search,
+                  cursor: r.scanned,
+                  incremental: true,
+                });
+              }
+              apply({ ...filters, result: r.snapshot });
+              setProgress("已检索全部 " + r.total + " 件候选事件");
+            } catch (error) {
+              setProgress("");
+              throw error;
+            }
           }, "语义检索完成");
         }}
       >
@@ -112,7 +136,7 @@ export function News({
         className="panel filters"
         onSubmit={(e) => {
           e.preventDefault();
-          apply({ ...f, page: "1", ids: "" });
+          apply({ ...f, page: "1", ids: "", result: "" });
         }}
       >
         <Field
@@ -174,7 +198,23 @@ export function News({
           </a>
         </div>
       </form>
+      <Notice text={progress} />
       <Notice text={a.notice} />
+      {(active.snapshot || active.result) && (
+        <p className="muted">
+          正在查看生成时保存的列表。{" "}
+          <a
+            href={url("/news", {
+              ...active,
+              snapshot: "",
+              result: "",
+              page: "1",
+            })}
+          >
+            查看实时列表
+          </a>
+        </p>
+      )}
       {!d.data || d.error ? (
         <Wait error={d.error} retry={d.refresh} />
       ) : (
@@ -198,28 +238,31 @@ export function News({
               </label>
             )}
           </div>
-          {s.rights.includes("review") && active.state === "pending" && (
-            <div className="actions">
-              <input
-                aria-label="退回原因"
-                placeholder="退回原因"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-              <button
-                disabled={!selected.length || a.busy}
-                onClick={() => a.run(() => review("approve"), "已入库")}
-              >
-                批量入库
-              </button>
-              <button
-                disabled={!selected.length || !reason.trim() || a.busy}
-                onClick={() => a.run(() => review("reject"), "已退回")}
-              >
-                批量退回
-              </button>
-            </div>
-          )}
+          {s.rights.includes("review") &&
+            !active.snapshot &&
+            !active.result &&
+            active.state === "pending" && (
+              <div className="actions">
+                <input
+                  aria-label="退回原因"
+                  placeholder="退回原因"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+                <button
+                  disabled={!selected.length || a.busy}
+                  onClick={() => a.run(() => review("approve"), "已入库")}
+                >
+                  批量入库
+                </button>
+                <button
+                  disabled={!selected.length || !reason.trim() || a.busy}
+                  onClick={() => a.run(() => review("reject"), "已退回")}
+                >
+                  批量退回
+                </button>
+              </div>
+            )}
           {d.data.items.map((e) => (
             <div className="selectable" key={e.id}>
               <input

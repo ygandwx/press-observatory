@@ -9,7 +9,7 @@ from .api import endpoint
 from .domain import require, media_row, event_row, query_events, bounded_int
 from .events_api import page_rows
 from .models import Media, Source, Rule, Policy, Change, Run
-from .catalog import CHANNELS, CATEGORIES, FOCUS, LEVELS
+from .catalog import MARKET_SECTIONS, CHANNELS, CATEGORIES, FOCUS, LEVELS
 from .collection import ADAPTERS, enqueue, inference
 from .external import normalize_url, document
 
@@ -35,6 +35,18 @@ class MediaSerializer(serializers.ModelSerializer):
             and data["level"] not in LEVELS
         ):
             raise serializers.ValidationError("无效的层级或关注等级。")
+        section = data.get(
+            "digest_section", getattr(self.instance, "digest_section", "")
+        )
+        reference = data.get("reference", getattr(self.instance, "reference", ""))
+        if section and (
+            section not in MARKET_SECTIONS
+            or category != "头部市场化纸媒"
+            or not reference
+        ):
+            raise serializers.ValidationError(
+                "市场化纸媒的日报归栏须选择有效栏目，并填写可核验的分类资料出处。"
+            )
         channels = data.get("channels", {})
         if not isinstance(channels, dict) or any(
             k not in CHANNELS or not isinstance(v, str) for k, v in channels.items()
@@ -106,6 +118,11 @@ def archives(req, pk=None):
                 "timeline": [event_row(e) for e in qs[:30]],
             }
         )
+    if req.GET.get("snapshot"):
+        from .snapshots import load, filter_media
+
+        rows = filter_media(load(req.user, req.GET["snapshot"], "media").rows, req.GET)
+        return Response(page_rows(req, rows, lambda row: row))
     qs = Media.objects.order_by("name")
     for k in ("focus", "level", "category", "subcategory", "region", "kind"):
         if req.GET.get(k):
