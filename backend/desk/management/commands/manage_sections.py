@@ -20,9 +20,14 @@ class Command(BaseCommand):
         mode = p.add_mutually_exclusive_group()
         mode.add_argument("--trial-key")
         mode.add_argument("--schedule", action="store_true")
+        mode.add_argument(
+            "--paused",
+            action="store_true",
+            help="以停用状态登记栏目，保留已有配置的运行状态。",
+        )
 
     @transaction.atomic
-    def handle(self, file, apply, trial_key, schedule, **options):
+    def handle(self, file, apply, trial_key, schedule, paused, **options):
         if (trial_key or schedule) and not apply:
             raise CommandError("修改定时或投递任务时请显式指定 --apply")
         if trial_key and len(trial_key) > 60:
@@ -77,7 +82,7 @@ class Command(BaseCommand):
                         profile=profile,
                         media=direct,
                         adapter="html",
-                        enabled=True,
+                        enabled=not paused,
                         scheduled=False,
                         trusted=False,
                     )

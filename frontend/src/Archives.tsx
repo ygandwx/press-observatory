@@ -517,7 +517,7 @@ function Verification({ m }: { m: Media }) {
         <details>
           <summary>集团共享、历史及其他关联渠道</summary>
           {row.related_channels.map((c, i) => (
-            <p key={i}><b>{c.field} · {c.name}</b>　{c.relationship}。{c.note}{" "}
+            <p key={i}><b>{c.field} · {c.name}</b>　{c.relationship}{c.entity && `（${c.entity}）`}。{c.note}{" "}
               <a href={c.url} target="_blank" rel="noreferrer">关系出处 ↗</a></p>
           ))}
         </details>
@@ -527,6 +527,7 @@ function Verification({ m }: { m: Media }) {
           <summary>前次记录与本次修订</summary>
           {row.review_history.map((f, i) => (
             <p key={i}><b>{f.field}</b>　{f.value}　{f.basis}{" "}
+              {f.reason && <span>本次修订依据　{f.reason} </span>}
               <a href={f.url} target="_blank" rel="noreferrer">前次出处 ↗</a></p>
           ))}
         </details>

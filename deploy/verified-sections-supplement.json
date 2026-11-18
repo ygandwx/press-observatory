@@ -1,0 +1,116 @@
+[
+  {
+    "name": "新华网股份有限公司·公司动态",
+    "media": null,
+    "covered": [
+      "新华社"
+    ],
+    "regular": false,
+    "url": "https://www.xinhuanet.com/company/news.htm",
+    "profile": {
+      "prefix": "/company/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "新华网"
+      ],
+      "title_terms": [
+        "获评",
+        "揭牌",
+        "启用",
+        "合作",
+        "发布"
+      ],
+      "publisher": "新华网股份有限公司",
+      "cadence": "weekly",
+      "headline_selector": ".article h1.title",
+      "body_selector": "#detailContent",
+      "selector": "#showData0 h3 a[href]",
+      "date_selector": ".article .info"
+    }
+  },
+  {
+    "name": "浙江日报报业集团·社会责任报告",
+    "media": null,
+    "covered": [
+      "浙江日报",
+      "钱江晚报"
+    ],
+    "regular": false,
+    "url": "https://www.8531.cn/groupnews/zrbg/",
+    "profile": {
+      "prefix": "/groupnews/zrbg/",
+      "interval": 4,
+      "limit": 1,
+      "subject_terms": [
+        "浙江日报报业集团",
+        "浙报集团"
+      ],
+      "title_terms": [
+        "社会责任"
+      ],
+      "publisher": "浙江日报报业集团",
+      "cadence": "weekly",
+      "headline_selector": "h2.doc-title",
+      "body_selector": ".html-content",
+      "selector": ".m-list .item a[href]",
+      "date_selector": ".doc-info"
+    }
+  },
+  {
+    "name": "中国财政杂志社·预算与参评公示",
+    "media": null,
+    "covered": [
+      "中国财政",
+      "财务与会计"
+    ],
+    "regular": false,
+    "url": "https://www.zgcznet.com/",
+    "profile": {
+      "prefix": "/sytzgg/",
+      "interval": 4,
+      "limit": 3,
+      "subject_terms": [
+        "中国财政杂志社单位预算",
+        "中国财政杂志社参评"
+      ],
+      "title_terms": [
+        "单位预算",
+        "参评"
+      ],
+      "publisher": "中国财政杂志社",
+      "cadence": "weekly",
+      "headline_selector": ".journal_ti h3",
+      "body_selector": "#print_html",
+      "selector": ".leftgd_tzgg .infoList a[href]",
+      "date_selector": ".journal_fu"
+    }
+  },
+  {
+    "name": "内蒙古日报社·历史预决算公示",
+    "media": null,
+    "covered": [
+      "内蒙古日报"
+    ],
+    "regular": false,
+    "url": "https://commend.nmgnews.com.cn/yjsgs/",
+    "profile": {
+      "prefix": "/system/",
+      "interval": 4,
+      "limit": 2,
+      "subject_terms": [
+        "内蒙古日报社"
+      ],
+      "title_terms": [
+        "预算",
+        "决算"
+      ],
+      "publisher": "内蒙古日报社",
+      "cadence": "weekly",
+      "headline_selector": "#div2.black24",
+      "body_selector": "#div_content",
+      "selector": "#cont_lb a.black16[href]",
+      "date_selector": "#div3 .black12"
+    }
+  }
+]

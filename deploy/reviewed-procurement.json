@@ -1,0 +1,237 @@
+[
+  {
+    "name": "中央广播电视总台·政府采购网制播公告",
+    "media": "中央广播电视总台",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%B8%AD%E5%A4%AE%E5%B9%BF%E6%92%AD%E7%94%B5%E8%A7%86%E6%80%BB%E5%8F%B0&dbselect=bidx&kw=%E5%88%B6%E6%92%AD&timeType=5",
+    "profile": {
+      "publisher": "中央广播电视总台",
+      "title_terms": [
+        "制播系统"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "光明日报社·政府采购网新闻纸公告",
+    "media": "光明日报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E5%85%89%E6%98%8E%E6%97%A5%E6%8A%A5%E7%A4%BE&dbselect=bidx&kw=%E6%96%B0%E9%97%BB%E7%BA%B8&timeType=5",
+    "profile": {
+      "publisher": "光明日报社",
+      "title_terms": [
+        "新闻纸"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "农民日报社·政府采购网印刷公告",
+    "media": "农民日报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E5%86%9C%E6%B0%91%E6%97%A5%E6%8A%A5%E7%A4%BE&dbselect=bidx&kw=%E5%8D%B0%E5%88%B7&timeType=5",
+    "profile": {
+      "publisher": "农民日报社",
+      "title_terms": [
+        "印刷服务"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "中国日报社·政府采购网印刷公告",
+    "media": "中国日报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%B8%AD%E5%9B%BD%E6%97%A5%E6%8A%A5%E7%A4%BE&dbselect=bidx&kw=%E5%8D%B0%E5%88%B7&timeType=5",
+    "profile": {
+      "publisher": "中国日报社",
+      "title_terms": [
+        "京外印刷服务",
+        "京内印刷服务"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "中国新闻社·政府采购网底片数字化公告",
+    "media": "中国新闻社",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%B8%AD%E5%9B%BD%E6%96%B0%E9%97%BB%E7%A4%BE&dbselect=bidx&kw=%E5%BA%95%E7%89%87%E6%95%B0%E5%AD%97%E5%8C%96&timeType=5",
+    "profile": {
+      "publisher": "中国新闻社",
+      "title_terms": [
+        "底片数字化"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "中央党校（国家行政学院）报刊社·政府采购网学习时报公告",
+    "media": "学习时报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%B8%AD%E5%A4%AE%E5%85%9A%E6%A0%A1%EF%BC%88%E5%9B%BD%E5%AE%B6%E8%A1%8C%E6%94%BF%E5%AD%A6%E9%99%A2%EF%BC%89%E6%8A%A5%E5%88%8A%E7%A4%BE&dbselect=bidx&kw=%E5%AD%A6%E4%B9%A0%E6%97%B6%E6%8A%A5&timeType=5",
+    "profile": {
+      "publisher": "中央党校（国家行政学院）报刊社",
+      "title_terms": [
+        "印刷服务"
+      ],
+      "subject_terms": [
+        "学习时报"
+      ],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "中央纪委国家监委新闻传播中心·政府采购网中国纪检监察报公告",
+    "media": "中国纪检监察报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%B8%AD%E5%A4%AE%E7%BA%AA%E5%A7%94%E5%9B%BD%E5%AE%B6%E7%9B%91%E5%A7%94%E6%96%B0%E9%97%BB%E4%BC%A0%E6%92%AD%E4%B8%AD%E5%BF%83&dbselect=bidx&kw=%E4%B8%AD%E5%9B%BD%E7%BA%AA%E6%A3%80%E7%9B%91%E5%AF%9F%E6%8A%A5&timeType=5",
+    "profile": {
+      "publisher": "中央纪委国家监委新闻传播中心",
+      "title_terms": [
+        "印刷"
+      ],
+      "subject_terms": [
+        "中国纪检监察报"
+      ],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "中国财政杂志社·政府采购网期刊印刷公告",
+    "media": null,
+    "covered": [
+      "中国财政",
+      "财务与会计"
+    ],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%B8%AD%E5%9B%BD%E8%B4%A2%E6%94%BF%E6%9D%82%E5%BF%97%E7%A4%BE&dbselect=bidx&kw=%E6%9C%9F%E5%88%8A%E5%8D%B0%E5%88%B7&timeType=5",
+    "profile": {
+      "publisher": "中国财政杂志社",
+      "title_terms": [
+        "期刊印刷"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "天津海河传媒中心（本部）·政府采购网天津日报公告",
+    "media": "天津日报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E5%A4%A9%E6%B4%A5%E6%B5%B7%E6%B2%B3%E4%BC%A0%E5%AA%92%E4%B8%AD%E5%BF%83%EF%BC%88%E6%9C%AC%E9%83%A8%EF%BC%89&dbselect=bidx&kw=%E5%A4%A9%E6%B4%A5%E6%97%A5%E6%8A%A5&timeType=5",
+    "profile": {
+      "publisher": "天津海河传媒中心（本部）",
+      "title_terms": [
+        "成品报印刷"
+      ],
+      "subject_terms": [
+        "天津日报"
+      ],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "人民日报社·政府采购网视频客户端公告",
+    "media": "人民日报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%BA%BA%E6%B0%91%E6%97%A5%E6%8A%A5%E7%A4%BE&dbselect=bidx&kw=%E8%A7%86%E9%A2%91%E5%AE%A2%E6%88%B7%E7%AB%AF&timeType=5",
+    "profile": {
+      "publisher": "人民日报社",
+      "title_terms": [
+        "视频客户端"
+      ],
+      "subject_terms": [
+        "人民日报"
+      ],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "新华通讯社·政府采购网新闻语料库公告",
+    "media": "新华社",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E6%96%B0%E5%8D%8E%E9%80%9A%E8%AE%AF%E7%A4%BE&dbselect=bidx&kw=%E6%96%B0%E9%97%BB%E8%AF%AD%E6%96%99%E5%BA%93&timeType=5",
+    "profile": {
+      "publisher": "新华通讯社",
+      "title_terms": [
+        "新闻语料库"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "人民政协报社·政府采购网印刷公告",
+    "media": "人民政协报",
+    "covered": [],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%BA%BA%E6%B0%91%E6%94%BF%E5%8D%8F%E6%8A%A5%E7%A4%BE&dbselect=bidx&kw=%E5%8D%B0%E5%88%B7&timeType=5",
+    "profile": {
+      "publisher": "人民政协报社",
+      "title_terms": [
+        "报纸印刷服务"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  },
+  {
+    "name": "乌鲁木齐晚报社（乌鲁木齐晚报集团）·政府采购网石榴云公告",
+    "media": null,
+    "covered": [
+      "乌鲁木齐晚报"
+    ],
+    "regular": false,
+    "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&page_index=1&buyerName=%E4%B9%8C%E9%B2%81%E6%9C%A8%E9%BD%90%E6%99%9A%E6%8A%A5%E7%A4%BE%EF%BC%88%E4%B9%8C%E9%B2%81%E6%9C%A8%E9%BD%90%E6%99%9A%E6%8A%A5%E9%9B%86%E5%9B%A2%EF%BC%89&dbselect=bidx&kw=%E7%9F%B3%E6%A6%B4%E4%BA%91&timeType=5",
+    "profile": {
+      "publisher": "乌鲁木齐晚报社（乌鲁木齐晚报集团）",
+      "title_terms": [
+        "融媒体中心石榴云平台维护"
+      ],
+      "subject_terms": [],
+      "cadence": "weekly",
+      "interval": 4,
+      "limit": 1
+    }
+  }
+]

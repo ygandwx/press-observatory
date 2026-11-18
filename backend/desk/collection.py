@@ -12,6 +12,7 @@ from defusedxml import ElementTree
 from django.db import connection, transaction
 from django.db.models import Q, F
 from django.utils import timezone
+from . import procurement
 from .catalog import EVENTS, IMPORTANCE
 from .crawl import guarded, validate_profile
 from .domain import record
@@ -53,9 +54,11 @@ def source_signature(source):
 def verified_for_schedule(source):
     if source.profile.get("documents"):
         return False
-    counts = source.run_set.filter(
-        state="done", source_signature=source_signature(source)
-    ).values_list("counts", flat=True)
+    counts = (
+        source.run_set.filter(state="done", source_signature=source_signature(source))
+        .exclude(key__startswith="snapshot:")
+        .values_list("counts", flat=True)
+    )
     return (
         any(c.get("命中", 0) > 0 for c in counts)
         and Article.objects.filter(source=source).exists()
@@ -122,6 +125,8 @@ def adapter_items(source):
             if isinstance(r, dict) and r.get("title") and r.get("url")
         ]
     profile = validate_profile(source.profile)
+    if source.adapter == "html" and procurement.applies(source):
+        return procurement.get_items(source)
     limit = profile.get("limit", 30)
     landing, raw = fetch(source.url)
     if source.adapter == "rss":
@@ -233,11 +238,13 @@ def ingest(source, title, url, rules, counts, run, lease):
         with guarded(article_source) as article_crawler:
             try:
                 canonical, headline, body = document(url)
-                if target["title"] not in headline:
+                if " ".join(target["title"].split()) != " ".join(headline.split()):
                     raise ExternalError("目录标题与原文标题不一致，需复核。")
             finally:
                 crawler.audit.update(article_crawler.audit)
                 crawler.published = article_crawler.published
+    elif source.adapter == "html" and procurement.applies(source):
+        canonical, headline, body = procurement.get_notice(source, title, url)
     else:
         canonical, headline, body = document(url)
     payload = {
