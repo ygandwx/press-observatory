@@ -18,13 +18,14 @@ chmod 600 .env
 docker compose config -q
 docker compose up -d --build
 docker compose logs init
-docker compose exec web python manage.py account reader 阅读
-docker compose exec web python manage.py account editor 编辑 审核 配置
-docker compose exec web python manage.py account publisher 签发
+docker compose exec web python manage.py account reader 查看人员
+docker compose exec web python manage.py account editor 维护人员
 curl --fail http://127.0.0.1:8080/api/v1/ready
 ```
 
 账号命令交互读取密码；再次运行可调整角色，加 `--password` 更新密码。用浏览器打开上述地址的首页。启用 TLS 反向代理时设置域名对应的 `ALLOWED_HOSTS`、`CSRF_TRUSTED_ORIGINS` 和 `COOKIE_SECURE=1`。生产前限制登录尝试速率、设置数据库备份保留期，并确认采集服务器允许访问目标官方信源。停止服务用 `docker compose stop`。
+
+从五组账号升级时，迁移 0004 保留原账号和密码，阅读账号进入查看人员组，原操作账号进入维护人员组。正式名册的预检、事务导入、回读与回退见[档案迁移说明](archive-directory.md)。
 
 ## 名册、信源与模型
 
@@ -67,7 +68,7 @@ export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsa
 export DEV_SQLITE=1
 python backend/manage.py migrate
 python backend/manage.py bootstrap --public-sources
-python backend/manage.py account local 编辑 审核 签发 配置
+python backend/manage.py account local 维护人员
 python backend/manage.py runserver 127.0.0.1:8000
 ```
 

@@ -21,7 +21,9 @@ class PlatformTests(TestCase):
         cls.users = {}
         for role in ("阅读", "编辑", "审核", "签发", "配置"):
             u = User.objects.create_user(username=role, password="only-TestCase-1234")
-            u.groups.add(Group.objects.get(name=role))
+            u.groups.add(
+                Group.objects.get(name="查看人员" if role == "阅读" else "维护人员")
+            )
             cls.users[role] = u
         cls.media = Media.objects.create(
             name="测试机构", category="地方党媒体系", region="示例省"
@@ -89,12 +91,19 @@ class PlatformTests(TestCase):
             self.assertEqual(viewer.get("/api/v1/" + path).status_code, 403)
         for path in ("events", "monitor/collect", "monitor/policy", "reports"):
             self.assertEqual(self.post(viewer, path, {}).status_code, 403)
-        self.assertEqual(
-            self.post(self.use("编辑"), "events/review", {}).status_code, 403
-        )
-        self.assertEqual(
-            self.post(self.use("审核"), "monitor/policy", {}).status_code, 403
-        )
+        for role in ("编辑", "审核", "签发", "配置"):
+            self.assertEqual(
+                self.use(role).get("/api/v1/session").json()["role"], "维护人员"
+            )
+        for path in (
+            "accounts",
+            "events/search",
+            f"events/{pending.id}",
+            f"media/{self.media.id}",
+        ):
+            self.assertEqual(
+                self.post(viewer, path, {"action": "star"}).status_code, 403
+            )
 
     def test_link_verification_and_transactional_batch(self):
         a = self.candidate()
@@ -199,7 +208,7 @@ class PlatformTests(TestCase):
 
     def test_star_semantic_and_csv_scope(self):
         e = self.approved()
-        c = self.use("阅读")
+        c = self.use("审核")
         self.post(c, f"events/{e.id}", {"action": "star", "on": True})
         self.assertEqual(c.get("/api/v1/events?star=1").json()["count"], 1)
         self.assertEqual(
@@ -293,7 +302,7 @@ class PlatformTests(TestCase):
         self.assertEqual(self.use("阅读").get("/api/v1/" + path).status_code, 404)
         self.assertEqual(
             self.post(
-                edit, path, {"action": "issue", "version": draft["version"]}
+                self.use("阅读"), path, {"action": "issue", "version": draft["version"]}
             ).status_code,
             403,
         )
@@ -500,7 +509,7 @@ class PlatformTests(TestCase):
         )
         new = reviewer.get("/api/v1/dashboard").json()["cards"]
         self.assertEqual([new[i]["value"] for i in (1, 3)], [0, 0])
-        self.users["审核"].groups.set([Group.objects.get(name="阅读")])
+        self.users["审核"].groups.set([Group.objects.get(name="查看人员")])
         self.assertEqual(
             reviewer.get("/api/v1/events", old_queue["filters"]).status_code, 403
         )
@@ -632,7 +641,7 @@ class PlatformTests(TestCase):
         )
 
     def test_search_entire_filtered_set_and_more_than_500_matches(self):
-        viewer = self.use("阅读")
+        viewer = self.use("审核")
         now = timezone.now()
         events = Event.objects.bulk_create(
             [
@@ -682,7 +691,7 @@ class PlatformTests(TestCase):
         )
 
     def test_partial_search_failure_and_retry_do_not_publish_partial_hits(self):
-        viewer = self.use("阅读")
+        viewer = self.use("审核")
         now = timezone.now()
         Event.objects.bulk_create(
             [
@@ -937,3 +946,132 @@ class PlatformTests(TestCase):
             ):
                 self.assertTrue(work_once())
             self.assertEqual(Article.objects.get(url=url).events.get().state, "pending")
+
+
+class DirectoryImportTests(TestCase):
+    def test_round_trip_pagination_and_unchanged_existing_relations(self):
+        import json
+        from io import StringIO
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from uuid import UUID
+        from django.core.management.base import CommandError
+        from .catalog import CHANNELS
+        from .management.commands.archive_records import FIELD_MAP
+
+        call_command("bootstrap", stdout=StringIO())
+        desk = User.objects.create_user("目录维护")
+        desk.groups.add(Group.objects.get(name="维护人员"))
+        reader = User.objects.create_user("目录查看")
+        reader.groups.add(Group.objects.get(name="查看人员"))
+        existing = Media.objects.create(
+            name="验证0号报", channels={"官网": "https://directory.invalid/verified"}
+        )
+        source = Source.objects.create(
+            name="原有信源", url="https://directory.invalid/feed", media=existing
+        )
+        pending = Event.objects.create(title="待审样本")
+        pending.media.add(existing)
+        rows = []
+        for i in range(23):
+            name = f"验证{i}号报"
+            form = {k: "" for k in FIELD_MAP}
+            form.update(
+                {
+                    "媒体名称": name,
+                    "高优先级标注": False,
+                    "tags": ["教育"],
+                    "档案状态": "在库",
+                    "公众号": "某报官方微信" if i == 1 else "",
+                }
+            )
+            matrix = {k: {"text": "该渠道信息待补充", "links": []} for k in CHANNELS}
+            if i == 1:
+                matrix["海外账号"] = {
+                    "text": "Example Press",
+                    "links": [["主页", "https://directory.invalid/overseas"]],
+                }
+                matrix["官网"] = {
+                    "text": "官网入口",
+                    "links": [["网站", "https://directory.invalid/"]],
+                }
+            rows.append(
+                {
+                    "name": name,
+                    "url": "https://4m96d46usftbd.doubaoapps.com/app/app_17gxuzrs2fg/archives/"
+                    + str(UUID(int=i + 1)),
+                    "form": form,
+                    "metadata": matrix,
+                }
+            )
+        with TemporaryDirectory() as tmp:
+            src = Path(tmp) / "rows.json"
+            dst = Path(tmp) / "export.json"
+            src.write_text(json.dumps(rows))
+            call_command(
+                "archive_records", "import", src, expected=23, stdout=StringIO()
+            )
+            self.assertEqual(Media.objects.count(), 1)
+            for _ in range(2):
+                call_command(
+                    "archive_records",
+                    "import",
+                    src,
+                    apply=True,
+                    expected=23,
+                    stdout=StringIO(),
+                )
+            call_command("archive_records", "export", dst, stdout=StringIO())
+            self.assertEqual(json.loads(dst.read_text()), rows)
+            src.write_text(json.dumps(rows + [rows[0]]))
+            with self.assertRaises(CommandError):
+                call_command(
+                    "archive_records", "import", src, apply=True, stdout=StringIO()
+                )
+        existing.refresh_from_db()
+        self.assertEqual(
+            existing.channels["官网"], "https://directory.invalid/verified"
+        )
+        self.assertEqual(pending.media.get(), existing)
+        self.assertEqual(source.media, existing)
+        self.assertEqual(Source.objects.count(), 1)
+        self.assertEqual(
+            Media.objects.get(name="验证1号报").channels["官网"],
+            "https://directory.invalid/",
+        )
+        self.assertEqual(
+            Media.objects.get(name="验证1号报").channels["官方公众号"], "某报官方微信"
+        )
+        self.assertEqual(
+            Media.objects.get(name="验证1号报").origin_record["metadata"]["海外账号"],
+            rows[1]["metadata"]["海外账号"],
+        )
+        api = APIClient()
+        api.force_login(reader)
+        first = api.get("/api/v1/media").json()
+        second = api.get("/api/v1/media?page=2").json()
+        self.assertEqual(len({m["id"] for m in first["items"] + second["items"]}), 23)
+        self.assertEqual(
+            api.patch(
+                f"/api/v1/media/{existing.pk}", {"name": "越权"}, format="json"
+            ).status_code,
+            403,
+        )
+        self.assertEqual(api.get("/api/v1/accounts").status_code, 403)
+        api.force_login(desk)
+        self.assertEqual(
+            api.post(
+                "/api/v1/accounts",
+                {"action": "role", "username": desk.username, "role": "查看人员"},
+                format="json",
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            api.post(
+                "/api/v1/accounts",
+                {"action": "role", "username": reader.username, "role": "维护人员"},
+                format="json",
+            ).status_code,
+            200,
+        )

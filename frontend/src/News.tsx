@@ -87,51 +87,55 @@ export function News({
           导出 CSV
         </a>
       </Heading>
-      <form
-        className="searchbar"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void a.run(async () => {
-            const filters = { ...f, result: "", ids: "", page: "1" };
-            type Batch = {
-              search: string;
-              scanned: number;
-              total: number;
-              complete: boolean;
-              snapshot: string;
-            };
-            setProgress("正在检索全部符合条件的事件…");
-            try {
-              let r = await request<Batch>("events/search", {
-                q: ai,
-                filters,
-                incremental: true,
-              });
-              while (!r.complete) {
-                setProgress("正在检索 " + r.scanned + " / " + r.total + " 件");
-                r = await request<Batch>("events/search", {
-                  search: r.search,
-                  cursor: r.scanned,
+      {s.rights.includes("edit") && (
+        <form
+          className="searchbar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void a.run(async () => {
+              const filters = { ...f, result: "", ids: "", page: "1" };
+              type Batch = {
+                search: string;
+                scanned: number;
+                total: number;
+                complete: boolean;
+                snapshot: string;
+              };
+              setProgress("正在检索全部符合条件的事件…");
+              try {
+                let r = await request<Batch>("events/search", {
+                  q: ai,
+                  filters,
                   incremental: true,
                 });
+                while (!r.complete) {
+                  setProgress(
+                    "正在检索 " + r.scanned + " / " + r.total + " 件",
+                  );
+                  r = await request<Batch>("events/search", {
+                    search: r.search,
+                    cursor: r.scanned,
+                    incremental: true,
+                  });
+                }
+                apply({ ...filters, result: r.snapshot });
+                setProgress("已检索全部 " + r.total + " 件候选事件");
+              } catch (error) {
+                setProgress("");
+                throw error;
               }
-              apply({ ...filters, result: r.snapshot });
-              setProgress("已检索全部 " + r.total + " 件候选事件");
-            } catch (error) {
-              setProgress("");
-              throw error;
-            }
-          }, "语义检索完成");
-        }}
-      >
-        <input
-          aria-label="语义检索问题"
-          placeholder="搜索「最近有哪些报社改版？」"
-          value={ai}
-          onChange={(e) => setAi(e.target.value)}
-        />
-        <button disabled={!ai || a.busy}>AI 搜索</button>
-      </form>
+            }, "语义检索完成");
+          }}
+        >
+          <input
+            aria-label="语义检索问题"
+            placeholder="搜索「最近有哪些报社改版？」"
+            value={ai}
+            onChange={(e) => setAi(e.target.value)}
+          />
+          <button disabled={!ai || a.busy}>AI 搜索</button>
+        </form>
+      )}
       <form
         className="panel filters"
         onSubmit={(e) => {
@@ -316,9 +320,11 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
           .filter(Boolean)
           .join(" · ")}
       >
-        <button onClick={() => act({ action: "star", on: !e.starred })}>
-          {e.starred ? "取消收藏" : "☆ 收藏"}
-        </button>
+        {s.rights.includes("edit") && (
+          <button onClick={() => act({ action: "star", on: !e.starred })}>
+            {e.starred ? "取消收藏" : "☆ 收藏"}
+          </button>
+        )}
       </Heading>
       <Notice text={a.notice} />
       {s.rights.includes("edit") &&

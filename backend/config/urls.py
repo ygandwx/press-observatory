@@ -16,6 +16,7 @@ def frontend(request):
 routes = [
     ("ready", api.ready),
     ("session", api.session),
+    ("accounts", api.accounts),
     ("login", api.sign_in),
     ("logout", api.sign_out),
     ("dashboard", e.dashboard),

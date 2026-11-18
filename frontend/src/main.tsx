@@ -14,6 +14,7 @@ import Dashboard from "./Dashboard";
 import { News, EventDetail } from "./News";
 import { Archives, Archive } from "./Archives";
 import Monitor from "./Monitor";
+import { Accounts } from "./Accounts";
 import { Reports, ReportDetail } from "./Reports";
 import "./style.css";
 const links = [
@@ -23,6 +24,7 @@ const links = [
   ["/archives", "媒体档案", "▥"],
   ["/monitor", "监测中心", "◎"],
   ["/briefings", "每周简报", "▧"],
+  ["/accounts", "账号管理", "♙"],
 ];
 function Brand() {
   return (
@@ -106,6 +108,8 @@ function App() {
     ) : (
       <Archives s={s} />
     )
+  ) : page === "accounts" && s.role === "维护人员" ? (
+    <Accounts />
   ) : page === "monitor" && ops ? (
     <Monitor s={s} />
   ) : ["summary", "briefings"].includes(page) ? (
@@ -135,7 +139,9 @@ function App() {
         <small className="navlabel">观测工作台</small>
         <nav>
           {links
-            .filter(([path]) => path !== "/monitor" || ops)
+            .filter(
+              ([path]) => !["/accounts", "/monitor"].includes(path) || ops,
+            )
             .map(([path, name, icon]) => (
               <a
                 key={path}
@@ -164,6 +170,7 @@ function App() {
           </span>
           <div>
             <time>{day()}</time>
+            <span>{s.role}</span>
             <b>{s.username}</b>
             <button
               onClick={() =>

@@ -127,6 +127,7 @@ def filter_media(rows, f):
         m
         for m in rows
         if all(not f.get(k) or f[k] == m[k] for k in terms)
+        and (not f.get("tag") or f["tag"] in m.get("tags", []))
         and (f.get("following") != "1" or m["following"])
         and (query in m["name"].casefold() or query in m["owner"].casefold())
     ]

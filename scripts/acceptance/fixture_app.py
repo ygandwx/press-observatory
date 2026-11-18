@@ -52,7 +52,9 @@ def seed():
         u = User.objects.create_user(
             "验收" + role, password=os.environ["ACCEPTANCE_PASSWORD"]
         )
-        u.groups.add(Group.objects.get(name=role))
+        u.groups.add(
+            Group.objects.get(name="查看人员" if role == "阅读" else "维护人员")
+        )
     with tempfile.TemporaryDirectory() as folder:
         csv_path = Path(folder) / "synthetic.csv"
         with csv_path.open("w", encoding="utf-8", newline="") as f:

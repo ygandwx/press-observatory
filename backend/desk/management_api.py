@@ -10,7 +10,7 @@ from rest_framework.exceptions import ValidationError, PermissionDenied, NotFoun
 from .api import endpoint
 from .domain import require, media_row, event_row, query_events, bounded_int
 from .events_api import page_rows
-from .models import Media, Source, Rule, Policy, Change, Run
+from .models import Article, Media, Source, Rule, Policy, Change, Run
 from .catalog import MARKET_SECTIONS, CHANNELS, CATEGORIES, FOCUS, LEVELS
 from .collection import ADAPTERS, COUNTERS, enqueue, inference
 from .snapshots import consistent_read, project_events, freeze, load, filter_media
@@ -21,6 +21,7 @@ class MediaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Media
         exclude = ["updated", "followers"]
+        read_only_fields = ["origin_id", "origin_record"]
 
     def validate(self, data):
         category = data.get("category", getattr(self.instance, "category", ""))
@@ -33,7 +34,8 @@ class MediaSerializer(serializers.ModelSerializer):
         ):
             raise serializers.ValidationError("媒体一级、二级分类不匹配。")
         if (
-            data.get("focus", FOCUS[-1]) not in FOCUS
+            data.get("focus")
+            and data["focus"] not in FOCUS
             or data.get("level")
             and data["level"] not in LEVELS
         ):
@@ -117,13 +119,14 @@ def archives(req, pk=None):
             {
                 **media_row(m),
                 "following": m.followers.filter(pk=req.user.pk).exists(),
+                "origin_record": m.origin_record,
                 "count": qs.count(),
                 "timeline": [event_row(e) for e in qs[:30]],
             }
         )
     if req.GET.get("snapshot"):
         rows = filter_media(load(req.user, req.GET["snapshot"], "media").rows, req.GET)
-        return Response(page_rows(req, rows, lambda row: row))
+        return directory_page(req, rows)
     qs = Media.objects.order_by("name")
     for k in ("focus", "level", "category", "subcategory", "region", "kind"):
         if req.GET.get(k):
@@ -134,7 +137,28 @@ def archives(req, pk=None):
         qs = qs.filter(
             Q(name__icontains=req.GET["q"]) | Q(owner__icontains=req.GET["q"])
         )
+    if req.GET.get("tag") or req.GET.get("view") == "board":
+        rows = [
+            media_row(m)
+            for m in qs
+            if not req.GET.get("tag") or req.GET["tag"] in m.tags
+        ]
+        return directory_page(req, rows)
     return Response(page_rows(req, qs, media_row))
+
+
+def directory_page(req, rows):
+    if req.GET.get("view") == "board":
+        counts = Counter((row["category"], row["subcategory"]) for row in rows)
+        return Response(
+            {
+                "groups": [
+                    {"category": c, "subcategory": s, "count": n}
+                    for (c, s), n in sorted(counts.items())
+                ]
+            }
+        )
+    return Response(page_rows(req, rows, lambda row: row))
 
 
 def ops(user):
@@ -193,6 +217,18 @@ def monitoring(req):
                 "在库机构": len(media),
                 "启用信源": sum(row["enabled"] for row in sources),
                 "信源总数": len(sources),
+                "曾完成采集的信源": Run.objects.filter(
+                    state="done", source_id__isnull=False
+                )
+                .values("source_id")
+                .distinct()
+                .order_by()
+                .count(),
+                "已贡献原文的信源": Article.objects.filter(source_id__isnull=False)
+                .values("source_id")
+                .distinct()
+                .order_by()
+                .count(),
             },
             "slots": len(media) * len(CHANNELS),
             "pending": query_events(req.user, {"state": "pending"}).count()
