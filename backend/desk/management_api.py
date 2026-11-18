@@ -1,16 +1,19 @@
+import re
 import uuid
+from collections import Counter
 from django.db.models import Q
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from .api import endpoint
 from .domain import require, media_row, event_row, query_events, bounded_int
 from .events_api import page_rows
 from .models import Media, Source, Rule, Policy, Change, Run
 from .catalog import MARKET_SECTIONS, CHANNELS, CATEGORIES, FOCUS, LEVELS
-from .collection import ADAPTERS, enqueue, inference
+from .collection import ADAPTERS, COUNTERS, enqueue, inference
+from .snapshots import consistent_read, project_events, freeze, load, filter_media
 from .external import normalize_url, document
 
 
@@ -119,8 +122,6 @@ def archives(req, pk=None):
             }
         )
     if req.GET.get("snapshot"):
-        from .snapshots import load, filter_media
-
         rows = filter_media(load(req.user, req.GET["snapshot"], "media").rows, req.GET)
         return Response(page_rows(req, rows, lambda row: row))
     qs = Media.objects.order_by("name")
@@ -201,6 +202,54 @@ def monitoring(req):
     )
 
 
+@endpoint(["GET"])
+def collection_batch(req):
+    ops(req.user)
+    key = req.GET.get("key", "")
+    if not key or len(key) > 80:
+        raise ValidationError("请提供有效的采集批次。")
+    with consistent_read():
+        jobs = list(
+            Run.objects.filter(
+                trigger="手动采集",
+                key__startswith=f"manual:{key}:",
+                key__regex=rf"^manual:{re.escape(key)}:[0-9]+$",
+            )
+            .order_by("id")
+            .values("id", "source__name", "state", "counts", "progress", "message")
+        )
+        if not jobs:
+            raise NotFound("未找到本次采集。")
+        finished = sum(job["state"] not in ("queued", "running") for job in jobs)
+        counts = Counter({k: 0 for k in COUNTERS})
+        for job in jobs:
+            counts.update(job.pop("counts"))
+        complete = finished == len(jobs)
+        rows = []
+        if complete:
+            # Use the durable creation audit even when a worker reclaims a lease.
+            new_ids = Change.objects.filter(
+                actor="采集工作进程",
+                action="approved",
+                detail__run__in=[j["id"] for j in jobs],
+            ).values_list("event_id", flat=True)
+            qs = query_events(req.user, {}).filter(
+                Q(pk__in=new_ids) | Q(merged__pk__in=new_ids)
+            )
+            rows = project_events(qs, req.user)
+            counts["自动入库"] = new_ids.distinct().count()
+    return Response(
+        {
+            "jobs": jobs,
+            "counts": counts,
+            "finished": finished,
+            "complete": complete,
+            "event_count": len(rows),
+            "snapshot": freeze(req.user, "approved", rows).pk if rows else None,
+        }
+    )
+
+
 @endpoint(["POST"])
 def operations(req, action):
     data = req.data
@@ -236,11 +285,12 @@ def operations(req, action):
         token = str(data.get("key") or uuid.uuid4().hex)[:80]
         return Response(
             {
+                "key": token,
                 "jobs": enqueue(
                     "手动采集",
                     "manual:" + token,
                     [data["source"]] if data.get("source") else None,
-                )
+                ),
             },
             status=202,
         )

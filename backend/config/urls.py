@@ -26,6 +26,7 @@ routes = [
     ("media", m.archives),
     ("media/<int:pk>", m.archives),
     ("monitor", m.monitoring),
+    ("monitor/batch", m.collection_batch),
     ("monitor/<str:action>", m.operations),
     ("reports", r.reports),
     ("reports/<int:pk>", r.reports),

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import CollectButton from "./CollectButton";
 import * as echarts from "echarts/core";
 import { BarChart, LineChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
@@ -105,25 +106,7 @@ export default function Dashboard({ s }: { s: Session }) {
   return (
     <>
       <Heading title="领导看板" sub="全国纸媒业态每日动态总览">
-        {s.rights.includes("edit") && (
-          <button
-            className="red"
-            disabled={a.busy}
-            onClick={() =>
-              a.run(async () => {
-                const result = await request<{ jobs: number[] }>(
-                  "monitor/collect",
-                  { key: crypto.randomUUID() },
-                );
-                if (!result.jobs.length)
-                  throw new Error("请先配置并启用信源。");
-                location.href = "/monitor?tab=采集概览";
-              }, "已投递")
-            }
-          >
-            一键采集入库
-          </button>
-        )}
+        {s.rights.includes("edit") && <CollectButton refresh={d.refresh} />}
         <a className="button" href="/summary">
           查看今日日报 ↗
         </a>

@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from .models import Event, Media, Run, Source, Policy, Article, Edition, Change, Report
 from .domain import record, review
-from .collection import enqueue, schedule, work_once
+from .collection import enqueue, schedule, work_once, ManualCheck
 from .external import ExternalError, fetch
 
 
@@ -781,4 +781,121 @@ class PlatformTests(TestCase):
         self.assertCountEqual(
             c["events"][0]["sources"],
             [parent.articles.get().url, child.articles.get().url],
+        )
+
+    def test_collection_receipt_tracks_only_its_jobs_and_approved_events(self):
+        editor = self.use("编辑")
+        reader = self.use("阅读")
+        self.approved(5)
+        Source.objects.create(
+            name="合成人工信源",
+            media=self.media,
+            url="https://example.org/manual",
+            adapter="人工",
+        )
+        Policy.objects.create(pk=1, enabled=True, threshold=85)
+        receipt = self.post(editor, "monitor/collect", {"key": "receipt"}).json()
+        self.assertEqual(len(receipt["jobs"]), 2)
+        self.assertEqual(
+            receipt, self.post(editor, "monitor/collect", {"key": "receipt"}).json()
+        )
+        self.post(
+            editor,
+            "monitor/collect",
+            {"key": "receipt:other", "source": self.source.pk},
+        )
+        path = "/api/v1/monitor/batch"
+        params = {"key": receipt["key"]}
+        first = editor.get(path, params).json()
+        self.assertEqual([j["id"] for j in first["jobs"]], receipt["jobs"])
+        self.assertFalse(first["complete"])
+        self.assertIsNone(first["snapshot"])
+        self.assertEqual(reader.get(path, params).status_code, 403)
+        self.assertEqual(editor.get(path, {"key": "missing"}).status_code, 404)
+        title, link = "媒体上线独立采编工具", "https://example.org/new-tool"
+
+        def source_items(source):
+            if source.adapter == "人工":
+                raise ManualCheck("合成巡检")
+            return [(title, link)]
+
+        with (
+            patch("desk.collection.adapter_items", side_effect=source_items),
+            patch("desk.collection.document", return_value=(link, title, title)),
+            patch(
+                "desk.collection.inference",
+                return_value={
+                    "score": 95,
+                    "relevant": True,
+                    "category": "技术类",
+                    "summary": title,
+                    "importance": "常规",
+                    "subtype": "",
+                },
+            ),
+        ):
+            self.assertTrue(work_once())
+            self.assertTrue(work_once())
+        final = editor.get(path, params).json()
+        self.assertTrue(final["complete"])
+        self.assertEqual(final["finished"], 2)
+        self.assertEqual(final["counts"]["自动入库"], 1)
+        self.assertEqual(final["counts"]["AI 分析"], 1)
+        self.assertEqual([j["state"] for j in final["jobs"]], ["done", "manual"])
+        events = editor.get("/api/v1/events", {"snapshot": final["snapshot"]}).json()
+        self.assertEqual(events["count"], 1)
+        self.assertEqual(events["items"][0]["title"], title)
+        # A later attempt may rediscover the same event as a duplicate. Its original audit still links it to this receipt.
+        Run.objects.filter(pk=receipt["jobs"][0]).update(counts={"重复": 1})
+        final = editor.get(path, params).json()
+        self.assertEqual([final["counts"]["自动入库"], final["event_count"]], [1, 1])
+
+    def test_week_comparison_respects_approval_window_and_signed_version(self):
+        monday = timezone.localdate() - timedelta(
+            days=timezone.localdate().weekday() + 7
+        )
+
+        def at(day):
+            return datetime.combine(
+                day, datetime.min.time(), tzinfo=ZoneInfo("Asia/Shanghai")
+            )
+
+        for index, offset, category, state in [
+            (0, 0, "技术类", "approved"),
+            (1, 6, "政策类", "approved"),
+            (2, -7, "技术类", "approved"),
+            (3, -1, "政策类", "pending"),
+            (4, -8, "改革类", "approved"),
+        ]:
+            Event.objects.create(
+                title=f"合成周比较 {index}",
+                approved=at(monday + timedelta(days=offset)),
+                state=state,
+                category=category,
+            )
+        data = self.post(
+            self.use("编辑"), "reports", {"kind": "weekly", "day": str(monday)}
+        ).json()
+        c = data["content"]["week_comparison"]
+        self.assertEqual(
+            [c["total"], c["change"], c["start"], c["end"]],
+            [1, 1, str(monday - timedelta(days=7)), str(monday - timedelta(days=1))],
+        )
+        self.assertEqual(
+            c["categories"],
+            {
+                "技术类": {"current": 1, "previous": 1},
+                "政策类": {"current": 1, "previous": 0},
+            },
+        )
+        path = f"reports/{data['id']}"
+        self.post(
+            self.use("签发"), path, {"action": "issue", "version": data["version"]}
+        )
+        Event.objects.filter(title="合成周比较 3").update(state="approved")
+        self.assertEqual(
+            self.use("阅读")
+            .get("/api/v1/" + path)
+            .json()["content"]["week_comparison"],
+            c,
         )

@@ -668,3 +668,26 @@ h3 {
     margin: 15mm;
   }
 }
+
+.collection-dialog {
+  width: min(36rem, calc(100% - 2rem));
+  max-height: 80vh;
+  overflow: auto;
+  padding: 1.25rem;
+  color: inherit;
+  border: 1px solid #cdd5df;
+  border-radius: 12px;
+}
+.collection-dialog::backdrop {
+  background: rgb(17 36 61 / 45%);
+}
+.collection-dialog .snapshot {
+  margin-bottom: 1rem;
+}
+.collection-dialog .button {
+  margin-top: 1rem;
+}
+.paper .reference a {
+  display: block;
+  overflow-wrap: anywhere;
+}

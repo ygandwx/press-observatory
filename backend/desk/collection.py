@@ -16,9 +16,10 @@ from .external import analyze, document, fetch, normalize_url, ExternalError
 from .models import Source, Run, Rule, Policy, Event, Change
 
 ADAPTERS = ["html", "rss", "公众号", "微博", "头条号", "百家号", "短视频", "人工"]
-COUNTERS = ["发现", "命中", "自动入库", "待审", "过滤", "重复"]
+COUNTERS = ["发现", "命中", "AI 分析", "自动入库", "待审", "过滤", "重复"]
 
 
+@transaction.atomic
 def enqueue(trigger, key, ids=None):
     sources = Source.objects.filter(enabled=True)
     if ids is not None:
@@ -126,6 +127,7 @@ def ingest(source, title, url, rules, counts, run, lease):
     analysis = {}
     try:
         analysis = inference(payload["title"], body)
+        counts["AI 分析"] += 1
         payload.update(
             {
                 k: v
@@ -189,6 +191,7 @@ def ingest(source, title, url, rules, counts, run, lease):
                 "score": e.score,
                 "threshold": policy.threshold,
                 "model": os.getenv("MODEL_NAME", ""),
+                "run": run.pk,
             },
         )
 

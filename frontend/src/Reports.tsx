@@ -31,6 +31,13 @@ type Content = {
   headline: string;
   key_changes: string[];
   categories: Record<string, string[]>;
+  week_comparison?: {
+    start: string;
+    end: string;
+    total: number;
+    change: number;
+    categories: Record<string, { current: number; previous: number }>;
+  };
   section_order?: string[];
   section_events?: Record<string, number[]>;
   unclassified?: { id: number; media: string[] }[];
@@ -310,6 +317,28 @@ export function ReportDetail({
     ) : (
       <p className="muted">{empty}</p>
     );
+  const references = c.events.map((e) => (
+    <div className="reference" key={e.id} id={"event-" + e.id}>
+      <b>{e.title}</b>
+      {weekly && mode === "业务详版" && (
+        <p>
+          {e.media.join("、")} · {e.category}　{e.summary}
+        </p>
+      )}
+      <div>
+        {e.classification_sources?.map((ref) => (
+          <a key={ref.media} href={ref.url} rel="noreferrer" target="_blank">
+            {ref.media} · {ref.section}归栏出处 · {ref.url}
+          </a>
+        ))}
+        {e.sources.map((x, i) => (
+          <a key={x} href={x} rel="noreferrer" target="_blank">
+            原文 {i + 1} · {x}
+          </a>
+        ))}
+      </div>
+    </div>
+  ));
   return (
     <>
       <div className="actions tools">
@@ -438,11 +467,49 @@ export function ReportDetail({
           <h1>{weekly ? "全国纸媒业态每周简报" : "纸媒业态日报"}</h1>
           <p>
             第 {r.id} 期　{c.start}
-            {weekly ? " 至 " + c.end : ""}　{weekly ? mode : states[r.state]}
+            {weekly
+              ? " 至 " + c.end
+              : " " +
+                new Intl.DateTimeFormat("zh-CN", {
+                  weekday: "long",
+                  timeZone: "Asia/Shanghai",
+                }).format(new Date(c.start + "T12:00:00+08:00"))}
+            　{weekly ? mode : states[r.state]}
           </p>
           <small>{r.issuer ? "签发人 " + r.issuer : "尚未签发"}</small>
         </div>
         <blockquote>{c.headline}</blockquote>
+        {weekly && c.week_comparison && (
+          <section>
+            <h2>入库变化</h2>
+            <p>
+              本周 {c.snapshot["本期入库"]} 件，上周 {c.week_comparison.total}{" "}
+              件，
+              {c.week_comparison.change === 0
+                ? "与上周持平"
+                : (c.week_comparison.change > 0 ? "增加 " : "减少 ") +
+                  Math.abs(c.week_comparison.change) +
+                  " 件"}
+              。
+            </p>
+            {mode === "业务详版" && (
+              <>
+                <p>
+                  对比区间 {c.week_comparison.start} 至 {c.week_comparison.end}
+                </p>
+                <ul>
+                  {Object.entries(c.week_comparison.categories).map(
+                    ([category, n]) => (
+                      <li key={category}>
+                        {category} · 本周 {n.current} 件，上周 {n.previous} 件
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </>
+            )}
+          </section>
+        )}
         <h2>一、关键变化</h2>
         {list(c.key_changes, "本期暂无关键变化")}
         <h2>二、分类摘要</h2>
@@ -487,35 +554,18 @@ export function ReportDetail({
           ))}
         </div>
         <h2>{weekly && mode === "业务详版" ? "事件明细与原文" : "事件依据"}</h2>
-        {c.events.map((e) => (
-          <div className="reference" key={e.id} id={"event-" + e.id}>
-            <b>{e.title}</b>
-            {weekly && mode === "业务详版" && (
-              <p>
-                {e.media.join("、")} · {e.category}　{e.summary}
-              </p>
-            )}
-            <div>
-              {e.classification_sources?.map((ref) => (
-                <a
-                  key={ref.media}
-                  href={ref.url}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  {ref.media} · {ref.section}归栏出处 ↗　
-                </a>
-              ))}
-              {e.sources.map((x, i) => (
-                <a key={x} href={x} rel="noreferrer" target="_blank">
-                  原文 {i + 1} ↗　
-                </a>
-              ))}
-            </div>
-          </div>
-        ))}
+        {weekly && mode === "领导参阅版" && c.events.length > 0 ? (
+          <details>
+            <summary>查看 {c.events.length} 件事件与原文</summary>
+            {references}
+          </details>
+        ) : (
+          references
+        )}
         {!c.events.length && <p>本期无引用事件</p>}
-        <footer>数据截至生成时刻 · 仅供参阅</footer>
+        <footer>
+          数据来源为本期引用的原文与机构档案。统计截至生成时刻，供业务参阅。
+        </footer>
       </article>
       {!!r.history?.length && (
         <label className="edition">

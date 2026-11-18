@@ -12,6 +12,7 @@ import {
   useAction,
   useData,
 } from "./shared";
+import CollectButton from "./CollectButton";
 import { News } from "./News";
 import type { Session, Dict, EventRow } from "./shared";
 type Source = {
@@ -447,13 +448,10 @@ export default function Monitor({ s }: { s: Session }) {
   const m = d.data,
     editor = s.rights.includes("edit");
   const op = (action: string, body: unknown) =>
-    a.run(
-      async () => {
-        await request("monitor/" + action, body);
-        d.refresh();
-      },
-      action === "collect" ? "已投递采集任务" : "已记录",
-    );
+    a.run(async () => {
+      await request("monitor/" + action, body);
+      d.refresh();
+    }, "已记录");
   return (
     <>
       <Heading
@@ -500,15 +498,11 @@ export default function Monitor({ s }: { s: Session }) {
                         </option>
                       ))}
                   </select>
-                  <button
-                    className="red"
-                    disabled={a.busy || !m.sources.some((x) => x.enabled)}
-                    onClick={() =>
-                      op("collect", { source, key: crypto.randomUUID() })
-                    }
-                  >
-                    一键采集入库
-                  </button>
+                  <CollectButton
+                    source={source}
+                    disabled={!m.sources.some((x) => x.enabled)}
+                    refresh={d.refresh}
+                  />
                 </div>
               )}
             </div>

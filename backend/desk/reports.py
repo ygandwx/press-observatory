@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import timedelta
 import secrets
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from .models import Event, Media, Report, Edition, Change
@@ -127,6 +128,30 @@ def build_content(kind, day):
         ]
         for k, words in watch.items()
     }
+    if kind == "weekly":
+        previous_start = start - timedelta(days=7)
+        previous_end = start - timedelta(days=1)
+        previous = dict(
+            Event.objects.filter(
+                state="approved",
+                merged_into=None,
+                approved__date__range=(previous_start, previous_end),
+            )
+            .order_by()
+            .values_list("category")
+            .annotate(n=Count("id"))
+        )
+        previous_total = sum(previous.values())
+        report_sections["week_comparison"] = {
+            "start": str(previous_start),
+            "end": str(previous_end),
+            "total": previous_total,
+            "change": len(items) - previous_total,
+            "categories": {
+                k: {"current": by_type[k], "previous": previous.get(k, 0)}
+                for k in sorted(set(previous) | set(by_type))
+            },
+        }
     return {
         "start": str(start),
         "end": str(end),
