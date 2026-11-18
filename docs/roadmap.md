@@ -23,3 +23,5 @@
 | 目标 Ubuntu 环境 | Compose、健康探针、定时器及备份恢复命令 | 目标机上的 HTTPS、定时运行、告警与回退 |
 
 工程验证的操作和预期结果见[业务验收场景](acceptance.md)。模块实测记录、数据设计和运维命令见[功能对照](../README.md)、[技术架构](architecture.md)与[运行手册](operations.md)。
+
+各模块、监测八页签和跨角色操作的代码依据、浏览器证据及复跑命令见[完整验收矩阵](verification.md)。

@@ -34,5 +34,23 @@ jobs:
       - run: python backend/manage.py migrate --noinput
       - run: python manage.py test desk
         working-directory: backend
+      - name: Install headless Chromium for acceptance
+        run: npx playwright install --with-deps --only-shell chromium
+        working-directory: frontend
+      - name: Run isolated browser, PostgreSQL and worker acceptance
+        run: python scripts/acceptance/run.py
+        env:
+          ACCEPTANCE_PG_USER: postgres
+          ACCEPTANCE_PG_PASSWORD: isolated-ci-database
+      - name: Keep browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-acceptance
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            local-data/acceptance/*/results.json
+            local-data/acceptance/*/browser/**/*.png
       - run: docker build -t press-observatory:ci .
       - run: sh scripts/smoke_compose.sh

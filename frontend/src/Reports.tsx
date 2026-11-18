@@ -394,21 +394,23 @@ export function ReportDetail({
         {canEdit && r.state === "draft" && (
           <>
             <button onClick={() => edit(!editing)}>编辑</button>
-            <button
-              onClick={() =>
-                a.run(async () => {
-                  await request("reports", {
-                    kind: r.kind,
-                    day: r.day,
-                    version: r.version,
-                    regenerate: true,
-                  });
-                  d.refresh();
-                })
-              }
-            >
-              重新生成
-            </button>
+            {!r.history?.length && (
+              <button
+                onClick={() =>
+                  a.run(async () => {
+                    await request("reports", {
+                      kind: r.kind,
+                      day: r.day,
+                      version: r.version,
+                      regenerate: true,
+                    });
+                    d.refresh();
+                  })
+                }
+              >
+                重新生成
+              </button>
+            )}
             <button onClick={() => call("submit")}>提交签发</button>
           </>
         )}

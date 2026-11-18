@@ -157,7 +157,8 @@ def ingest(source, title, url, rules, counts, run, lease):
             Event.objects.filter(merged_into=None)
             .exclude(pk=e.pk)
             .order_by("-created")
-            .values_list("title", flat=True)[:500]
+            .values_list("title", flat=True)
+            .iterator(chunk_size=500)
         )
         similar = any(
             SequenceMatcher(None, e.title, t).ratio() >= 0.82 for t in candidates
@@ -171,6 +172,7 @@ def ingest(source, title, url, rules, counts, run, lease):
         elif (
             policy.enabled
             and source.trusted
+            and source.media_id is not None
             and e.score is not None
             and e.score >= policy.threshold
             and not similar

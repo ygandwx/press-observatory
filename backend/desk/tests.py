@@ -899,3 +899,41 @@ class PlatformTests(TestCase):
             .json()["content"]["week_comparison"],
             c,
         )
+
+    def test_automatic_routing_requires_a_linked_media_and_checks_older_duplicates(
+        self,
+    ):
+        Policy.objects.create(pk=1, enabled=True, threshold=85)
+        now = timezone.now()
+        older_title = "日报上线地方采编协作工具"
+        Event.objects.create(title=older_title, state="approved", approved=now)
+        Event.objects.bulk_create(
+            [
+                Event(title=f"合成历史 {i}", state="approved", approved=now)
+                for i in range(501)
+            ]
+        )
+        for index, (title, media) in enumerate(
+            [(older_title, self.media), ("媒体改革新业务机制", None)]
+        ):
+            self.source.media = media
+            self.source.save()
+            url = f"https://example.org/routing/{index}"
+            enqueue("测试", f"routing-{index}")
+            with (
+                patch("desk.collection.adapter_items", return_value=[(title, url)]),
+                patch(
+                    "desk.collection.document", return_value=(url, title, "合成内容")
+                ),
+                patch(
+                    "desk.collection.inference",
+                    return_value={
+                        "score": 99,
+                        "relevant": True,
+                        "category": "改革类",
+                        "summary": title,
+                    },
+                ),
+            ):
+                self.assertTrue(work_once())
+            self.assertEqual(Article.objects.get(url=url).events.get().state, "pending")

@@ -306,7 +306,7 @@ function Compare({ id }: { id: number }) {
 }
 export function Archive({ s, id }: { s: Session; id: string }) {
   const d = useData<Media>("media/" + id),
-    [edit, setEdit] = useState(query.edit === "1"),
+    [edit, setEdit] = useState(s.rights.includes("edit") && query.edit === "1"),
     act = useAction();
   if (!d.data || d.error) return <Wait error={d.error} retry={d.refresh} />;
   const m = d.data;
