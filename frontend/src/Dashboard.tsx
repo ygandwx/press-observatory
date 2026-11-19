@@ -10,7 +10,6 @@ import {
   Empty,
   Notice,
   Story,
-  day,
   request,
   url,
   useAction,
@@ -30,6 +29,7 @@ type Stats = {
     value: string | number;
     change?: number;
     note?: string;
+    comparison?: string;
     path?: string;
     filters: Dict;
   }[];
@@ -41,14 +41,18 @@ type Stats = {
   period: Dict;
   focused: EventRow[];
   insight: string;
-  alerts: { category: string; change: number }[];
+  alerts: { category: string; count: number; filters: Dict }[];
+  auto_share: { approved: number; auto: number; filters: Dict };
+  today_report: string;
 };
 function Graph({
   values,
   line = false,
+  link,
 }: {
   values: Record<string, number>;
   line?: boolean;
+  link: (key: string) => string;
 }) {
   const el = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -79,22 +83,37 @@ function Graph({
         },
       ],
     });
+    c.on("click", (item) => {
+      const original = Object.keys(values)[item.dataIndex];
+      if (original) location.assign(link(original));
+    });
     const observer = new ResizeObserver(() => c.resize());
     observer.observe(el.current);
     return () => {
       observer.disconnect();
       c.dispose();
     };
-  }, [values, line]);
+  }, [values, line, link]);
   return Object.keys(values).length ? (
-    <div
-      className="graph"
-      ref={el}
-      role="img"
-      aria-label={Object.entries(values)
-        .map(([k, v]) => k + " " + v)
-        .join("，")}
-    />
+    <>
+      {" "}
+      <div
+        className="graph"
+        ref={el}
+        role="img"
+        aria-label={Object.entries(values)
+          .map(([k, v]) => k + " " + v)
+          .join("，")}
+      />
+      <details className="graph-drills">
+        <summary>查看分项动态</summary>
+        {Object.entries(values).map(([key, count]) => (
+          <a key={key} href={link(key)}>
+            {key} · {count} 件
+          </a>
+        ))}
+      </details>
+    </>
   ) : (
     <Empty>当前区间暂无分布数据</Empty>
   );
@@ -107,7 +126,7 @@ export default function Dashboard({ s }: { s: Session }) {
     <>
       <Heading title="领导看板" sub="全国纸媒业态每日动态总览">
         {s.rights.includes("edit") && <CollectButton refresh={d.refresh} />}
-        <a className="button" href="/summary">
+        <a className="button" href={d.data?.today_report || "/summary"}>
           查看今日日报 ↗
         </a>
       </Heading>
@@ -123,7 +142,12 @@ export default function Dashboard({ s }: { s: Session }) {
                   <strong>{c.value}</strong>
                   <small>
                     {c.change !== undefined
-                      ? "较昨日 " + (c.change > 0 ? "+" : "") + c.change + " 件"
+                      ? "较" +
+                        (c.comparison || "昨日") +
+                        " " +
+                        (c.change > 0 ? "+" : "") +
+                        c.change +
+                        " 件"
                       : c.note || "在库记录"}
                   </small>
                 </>
@@ -137,6 +161,20 @@ export default function Dashboard({ s }: { s: Session }) {
               );
             })}
           </div>
+          <a
+            className="auto-share"
+            href={url("/news", d.data.auto_share.filters)}
+          >
+            AI 自动入库占比　
+            <strong>
+              {d.data.auto_share.approved
+                ? Math.round(
+                    (100 * d.data.auto_share.auto) / d.data.auto_share.approved,
+                  ) + "%"
+                : "—"}
+            </strong>
+            　{d.data.auto_share.auto} / {d.data.auto_share.approved} 件
+          </a>
           <div className="section-title">
             <h2>变化研判</h2>
             <div className="seg">
@@ -152,20 +190,16 @@ export default function Dashboard({ s }: { s: Session }) {
             </div>
           </div>
           {d.data.alerts.length > 0 && (
-            <section className="panel">
-              <h2>变化提醒</h2>
-              <small>较上一等长区间变化至少 3 件且达到 50%</small>
+            <section className="panel alert-strip">
+              <h2>今日异常提醒</h2>
+              <small>按北京时间发生日统计已批准事件</small>
               {d.data.alerts.map((x) => (
                 <a
                   className="row"
                   key={x.category}
-                  href={url("/news", {
-                    ...d.data!.period,
-                    category: x.category,
-                  })}
+                  href={url("/news", x.filters)}
                 >
-                  {x.category} · {x.change > 0 ? "+" : ""}
-                  {x.change} 件 ↗
+                  {x.category} · {x.count} 件 ↗
                 </a>
               ))}
             </section>
@@ -175,7 +209,8 @@ export default function Dashboard({ s }: { s: Session }) {
               <span className="kicker">AI 变化研判</span>
               <p>{d.data.insight || "当前区间暂无研判摘要"}</p>
               <small>
-                按北京时间统计首次入库事件 · {d.data.period.start} 至 {day()}
+                按北京时间统计首次入库事件 · {d.data.period.start} 至{" "}
+                {d.data.period.end}
               </small>
             </div>
             {s.rights.includes("edit") && (
@@ -221,7 +256,25 @@ export default function Dashboard({ s }: { s: Session }) {
             }).map(([k, v]) => (
               <section className="panel" key={k}>
                 <h2>{k}</h2>
-                <Graph values={v} line={k === "动态趋势"} />
+                <Graph
+                  values={v}
+                  line={k === "动态趋势"}
+                  link={(key) =>
+                    url(
+                      "/news",
+                      k === "动态趋势"
+                        ? { ...d.data!.period, start: key, end: key }
+                        : {
+                            ...d.data!.period,
+                            [k === "品类分布"
+                              ? "primary"
+                              : k === "地区分布"
+                                ? "region"
+                                : "category"]: key,
+                          },
+                    )
+                  }
+                />
               </section>
             ))}
           </div>

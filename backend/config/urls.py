@@ -1,7 +1,10 @@
-from django.urls import path, re_path
+from desk import api, geo_api
+from desk import events_api as e
+from desk import management_api as m
+from desk import reports_api as r
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
-from desk import api, events_api as e, management_api as m, reports_api as r
+from django.urls import path, re_path
 
 
 def frontend(request):
@@ -24,6 +27,7 @@ routes = [
     ("events/review", e.bulk),
     ("events/search", e.semantic),
     ("events/<int:pk>", e.event_detail),
+    ("geo", geo_api.timeline),
     ("media", m.archives),
     ("media/<int:pk>", m.archives),
     ("monitor", m.monitoring),

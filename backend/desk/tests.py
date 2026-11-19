@@ -22,7 +22,7 @@ class PlatformTests(TestCase):
         for role in ("阅读", "编辑", "审核", "签发", "配置"):
             u = User.objects.create_user(username=role, password="only-TestCase-1234")
             u.groups.add(
-                Group.objects.get(name="查看人员" if role == "阅读" else "维护人员")
+                Group.objects.get(name="社领导" if role == "阅读" else "运营编辑")
             )
             cls.users[role] = u
         cls.media = Media.objects.create(
@@ -30,6 +30,8 @@ class PlatformTests(TestCase):
         )
         cls.source = Source.objects.create(
             name="测试信源",
+            zone="媒体官网",
+            profile={"section": "社内动态"},
             media=cls.media,
             url="https://example.org/feed",
             trusted=True,
@@ -93,7 +95,7 @@ class PlatformTests(TestCase):
             self.assertEqual(self.post(viewer, path, {}).status_code, 403)
         for role in ("编辑", "审核", "签发", "配置"):
             self.assertEqual(
-                self.use(role).get("/api/v1/session").json()["role"], "维护人员"
+                self.use(role).get("/api/v1/session").json()["role"], "运营编辑"
             )
         for path in (
             "accounts",
@@ -259,8 +261,13 @@ class PlatformTests(TestCase):
         ):
             link = "https://example.org/" + str(i)
             result = {
-                "score": score,
-                "relevant": True,
+                "relevance_score": score,
+                "is_noise": False,
+                "subject_type": "媒体自身",
+                "event_nature": "改革融合",
+                "ai_reasoning": "合成报社公布自身采编流程变化。",
+                "noise_reason": "",
+                "occurred": "2026-11-18",
                 "category": "改革类",
                 "summary": "测试",
                 "importance": "常规",
@@ -480,7 +487,8 @@ class PlatformTests(TestCase):
         media.focus = "重点关注"
         media.save()
         cards = reviewer.get("/api/v1/dashboard").json()["cards"]
-        old_queue, old_archive = cards[1], cards[3]
+        old_queue = next(c for c in cards if c["name"] == "待审核条数")
+        old_archive = next(c for c in cards if c["name"] == "媒体档案总数")
         self.assertEqual(old_queue["value"], 1)
         self.assertEqual(old_archive["value"], 1)
         media.focus = "常规参照"
@@ -509,8 +517,11 @@ class PlatformTests(TestCase):
             400,
         )
         new = reviewer.get("/api/v1/dashboard").json()["cards"]
-        self.assertEqual([new[i]["value"] for i in (1, 3)], [0, 0])
-        self.users["审核"].groups.set([Group.objects.get(name="查看人员")])
+        self.assertEqual(next(c["value"] for c in new if c["name"] == "待审核条数"), 0)
+        self.assertEqual(
+            next(c["value"] for c in new if c["name"] == "媒体档案总数"), 1
+        )
+        self.users["审核"].groups.set([Group.objects.get(name="社领导")])
         self.assertEqual(
             reviewer.get("/api/v1/events", old_queue["filters"]).status_code, 403
         )
@@ -835,8 +846,13 @@ class PlatformTests(TestCase):
             patch(
                 "desk.collection.inference",
                 return_value={
-                    "score": 95,
-                    "relevant": True,
+                    "relevance_score": 95,
+                    "is_noise": False,
+                    "subject_type": "媒体自身",
+                    "event_nature": "改革融合",
+                    "ai_reasoning": "合成报社公布自身采编流程变化。",
+                    "noise_reason": "",
+                    "occurred": "2026-11-18",
                     "category": "技术类",
                     "summary": title,
                     "importance": "常规",
@@ -938,8 +954,13 @@ class PlatformTests(TestCase):
                 patch(
                     "desk.collection.inference",
                     return_value={
-                        "score": 99,
-                        "relevant": True,
+                        "relevance_score": 99,
+                        "is_noise": False,
+                        "subject_type": "媒体自身",
+                        "event_nature": "改革融合",
+                        "ai_reasoning": "合成报社公布自身采编流程变化。",
+                        "noise_reason": "",
+                        "occurred": "2026-11-18",
                         "category": "改革类",
                         "summary": title,
                     },
@@ -962,9 +983,9 @@ class DirectoryImportTests(TestCase):
 
         call_command("bootstrap", stdout=StringIO())
         desk = User.objects.create_user("目录维护")
-        desk.groups.add(Group.objects.get(name="维护人员"))
+        desk.groups.add(Group.objects.get(name="运营编辑"))
         reader = User.objects.create_user("目录查看")
-        reader.groups.add(Group.objects.get(name="查看人员"))
+        reader.groups.add(Group.objects.get(name="社领导"))
         existing = Media.objects.create(
             name="验证0号报", channels={"官网": "https://directory.invalid/verified"}
         )
@@ -1063,7 +1084,7 @@ class DirectoryImportTests(TestCase):
         self.assertEqual(
             api.post(
                 "/api/v1/accounts",
-                {"action": "role", "username": desk.username, "role": "查看人员"},
+                {"action": "role", "username": desk.username, "role": "社领导"},
                 format="json",
             ).status_code,
             400,
@@ -1071,7 +1092,7 @@ class DirectoryImportTests(TestCase):
         self.assertEqual(
             api.post(
                 "/api/v1/accounts",
-                {"action": "role", "username": reader.username, "role": "维护人员"},
+                {"action": "role", "username": reader.username, "role": "运营编辑"},
                 format="json",
             ).status_code,
             200,

@@ -26,8 +26,22 @@ export type Media = {
     record?: {
       date: string;
       collection_note?: string;
-      review_history?: { field: string; value: string; url: string; basis: string; date: string; reason?: string }[];
-      related_channels?: { field: string; name: string; relationship: string; entity?: string; url: string; note: string }[];
+      review_history?: {
+        field: string;
+        value: string;
+        url: string;
+        basis: string;
+        date: string;
+        reason?: string;
+      }[];
+      related_channels?: {
+        field: string;
+        name: string;
+        relationship: string;
+        entity?: string;
+        url: string;
+        note: string;
+      }[];
       facts: {
         field: string;
         value: string;
@@ -65,6 +79,14 @@ export type Media = {
   channels: Dict;
   reference: string;
   timeline?: EventRow[];
+  peers?: { id: number; name: string }[];
+  metrics?: {
+    kind: string;
+    value: string | number;
+    day: string;
+    unit: string;
+    source_url: string;
+  }[];
   count?: number;
   following?: boolean;
 };
@@ -81,13 +103,31 @@ export type EventRow = {
   created: string;
   creator: string;
   auto: boolean;
+  can_recheck?: boolean;
+  capture_method?: string;
+  reviewer?: string;
+  reviewed_at?: string;
+  is_noise?: boolean;
+  noise_reason?: string;
+  filtered_by?: string;
+  subject_type?: string;
+  event_nature?: string;
+  source_zone?: string;
+  related?: { id: number; title: string; category: string }[];
   score: number | null;
   reasoning: string;
   version: number;
   starred: boolean;
   tags: string[];
   media: Pick<Media, "id" | "name" | "region" | "category">[];
-  articles: { id: number; title: string; url: string; status: string }[];
+  articles: {
+    id: number;
+    title: string;
+    url: string;
+    status: string;
+    published?: string;
+    checked?: string;
+  }[];
   merged: { id: number; title: string; version: number }[];
   history?: { action: string; actor: string; at: string; detail: unknown }[];
 };
@@ -301,12 +341,25 @@ export function Pager({
     </div>
   );
 }
+export function tagValues(value: unknown): string[] {
+  const values = typeof value === "string" ? [value] : value;
+  return Array.isArray(values)
+    ? values.filter(
+        (x): x is string => typeof x === "string" && x.trim() !== "",
+      )
+    : [];
+}
 export function Story({ e }: { e: EventRow }) {
   return (
     <article className="story">
       <div className="meta">
-        <span className="tag">{e.category}</span>
-        <span>{e.media.map((m) => m.name).join("、")}</span>
+        <span className="tag">{e.category || "未分类"}</span>
+        {e.subtype && <span className="tag">{e.subtype}</span>}
+        {e.importance && <span>{e.importance}</span>}
+        {tagValues(e.tags).map((tag, i) => (
+          <span key={i}>{tag}</span>
+        ))}
+        <span>{(e.media || []).map((m) => m.name).join("、")}</span>
         {e.auto && <span>AI 自动入库</span>}
       </div>
       <a className="story-title" href={"/news/" + e.id}>
@@ -314,7 +367,7 @@ export function Story({ e }: { e: EventRow }) {
       </a>
       {e.summary && <p>{e.summary}</p>}
       <small>
-        {e.occurred || "发生日待核验"} · {e.articles.length} 份来源
+        {e.occurred || "发生日待核验"} · {(e.articles || []).length} 份来源
       </small>
     </article>
   );

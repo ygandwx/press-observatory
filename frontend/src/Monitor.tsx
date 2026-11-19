@@ -25,12 +25,26 @@ type Source = {
   trusted: boolean;
   scheduled: boolean;
   level: string;
+  zone: string;
+  stop_reason: string;
+  latest?: Job;
+  profile: { section?: string; cadence?: string; [key: string]: unknown };
+  effective_cadence: string;
+  scope_reason: string;
+  collectible: boolean;
+  noise_week?: {
+    total: number;
+    noise: number;
+    rate: number;
+    high_noise: boolean;
+  };
 };
 type Rule = {
   id: number;
   word: string;
   kind: string;
   category: string;
+  media_category: string;
   enabled: boolean;
   hits: number;
 };
@@ -45,13 +59,55 @@ type Job = {
   attempts: number;
   counts: Record<string, number>;
 };
+type NoiseReport = {
+  total: number;
+  noise: number;
+  feedback: number;
+  sources: {
+    source_id: number;
+    source__name: string;
+    total: number;
+    noise: number;
+    rate: number;
+  }[];
+  reasons: { noise_reason: string; count: number }[];
+};
+type EditorialStats = {
+  minimum_observations: number;
+  high_noise_rate: number;
+  failed_names: string[];
+  daily: NoiseReport;
+  weekly: NoiseReport;
+  oldest_pending: string | null;
+  pending_hours: number | null;
+  failed_sources: number;
+  by_category: { category: string; observed: number; target: number | null }[];
+  decisions: {
+    title: string;
+    url: string;
+    outcome: string;
+    noise_reason: string;
+    filtered_by: string;
+    terms: string[];
+    at: string;
+    actor: string;
+    source_zone: string;
+  }[];
+};
 type MonitorData = {
+  editorial: EditorialStats;
   coverage: Record<string, number>;
   sources: Source[];
   rules: Rule[];
   runs: Job[];
   adapters: string[];
-  policy: { enabled: boolean; threshold: number; low: number };
+  section_options: Record<string, string[]>;
+  policy: {
+    enabled: boolean;
+    ai_enabled: boolean;
+    threshold: number;
+    low: number;
+  };
   missing: { name: string; media: number; channel: string }[];
   slots: number;
   pending: number;
@@ -90,7 +146,12 @@ function Editors({
     const v = Object.fromEntries(
       Object.entries(item).map(([k, x]) => [k, String(x ?? "")]),
     );
-    set({ ...v, media: v.media_id || "" });
+    set({
+      ...v,
+      media: v.media_id || "",
+      section: "profile" in item ? item.profile.section || "" : "",
+      cadence: "profile" in item ? item.profile.cadence || "twice_daily" : "",
+    });
     enable(item.enabled);
     setSchedule("scheduled" in item && item.scheduled);
     trusted("trusted" in item && item.trusted);
@@ -117,6 +178,14 @@ function Editors({
                       name: f.name,
                       url: f.url,
                       adapter: f.adapter || "html",
+                      profile: {
+                        ...(d.sources.find((x) => String(x.id) === f.id)
+                          ?.profile || {}),
+                        ...(f.section ? { section: f.section } : {}),
+                        cadence: f.cadence || "twice_daily",
+                      },
+                      zone: f.zone || "",
+                      stop_reason: f.stop_reason || "",
                       level: f.level || "补充信源",
                       media: f.media || null,
                       enabled: on,
@@ -126,6 +195,7 @@ function Editors({
                     }
                   : {
                       word: f.word,
+                      media_category: f.media_category || "",
                       kind: f.kind || "主体词",
                       category: f.category || "",
                       enabled: on,
@@ -157,6 +227,34 @@ function Editors({
                 value={f.adapter || "html"}
                 options={d.adapters}
                 onChange={(v) => change("adapter", v)}
+              />
+              <Select
+                label="信源类型"
+                value={f.zone || ""}
+                options={Object.keys(d.section_options)}
+                onChange={(v) => set({ ...f, zone: v, section: "" })}
+              />
+              <Select
+                label="已核实栏目"
+                value={f.section || ""}
+                options={d.section_options[f.zone || ""] || []}
+                onChange={(v) => change("section", v)}
+              />
+              <label>
+                采集频次
+                <select
+                  value={f.cadence || "twice_daily"}
+                  onChange={(e) => change("cadence", e.target.value)}
+                >
+                  <option value="twice_daily">每日两次</option>
+                  <option value="daily">每日一次</option>
+                  <option value="weekly">每周一次</option>
+                </select>
+              </label>
+              <Field
+                label="停用或降频原因"
+                value={f.stop_reason || ""}
+                onChange={(v) => change("stop_reason", v)}
               />
               <Field
                 label="信源层级"
@@ -209,6 +307,12 @@ function Editors({
                 onChange={(v) => change("kind", v)}
               />
               <Select
+                label="适用媒体品类"
+                value={f.media_category || ""}
+                options={Object.keys(s.catalog.categories)}
+                onChange={(v) => change("media_category", v)}
+              />
+              <Select
                 label="关联分类"
                 value={f.category || ""}
                 options={Object.keys(s.catalog.events)}
@@ -244,10 +348,45 @@ function Editors({
                 <b>{item.name}</b>
                 <small>
                   {item.adapter} · {item.level} ·{" "}
-                  {item.enabled ? "启用" : "已暂停"}
+                  {item.enabled ? "启用" : "已暂停"} ·{" "}
+                  {item.zone || "待核实栏目"} {item.stop_reason}
+                  <small>
+                    {item.scheduled ? "已配置定时" : "手动采集"} ·{" "}
+                    {item.collectible ? "当前可采" : "当前受限"} · 近七日{" "}
+                    {item.noise_week
+                      ? `噪音 ${item.noise_week.noise} / ${item.noise_week.total} 篇`
+                      : "暂无可判定原文"}
+                  </small>
+                  {item.scope_reason && (
+                    <small>当前不可采 · {item.scope_reason}</small>
+                  )}
+                  {item.latest && (
+                    <small>
+                      最近采集 {new Date(item.latest.created).toLocaleString()}{" "}
+                      · {states[item.latest.state] || item.latest.state} · 发现{" "}
+                      {item.latest.counts["发现"] || 0} 条 ·{" "}
+                      {item.latest.message}
+                    </small>
+                  )}
                 </small>
               </div>
-              {cfg && <button onClick={() => edit(item)}>编辑</button>}
+              {cfg && (
+                <>
+                  <button onClick={() => edit(item)}>编辑</button>
+                  <button
+                    onClick={() =>
+                      a.run(async () => {
+                        await request("monitor/archive-source", {
+                          id: item.id,
+                        });
+                        refresh();
+                      })
+                    }
+                  >
+                    移出采集
+                  </button>
+                </>
+              )}
             </div>
           ))
         : d.rules.map((item) => (
@@ -273,6 +412,14 @@ function Policy({
   refresh: () => void;
 }) {
   const [enabled, setEnabled] = useState(d.policy.enabled),
+    [ai, setAI] = useState(d.policy.ai_enabled),
+    [targets, setTargets] = useState<Record<string, string>>(
+      Object.fromEntries(
+        d.editorial.by_category
+          .filter((r) => r.target != null)
+          .map((r) => [r.category, String(r.target)]),
+      ),
+    ),
     [threshold, setThreshold] = useState(String(d.policy.threshold)),
     [low, setLow] = useState(String(d.policy.low)),
     a = useAction();
@@ -291,19 +438,33 @@ function Policy({
           />
           启用 AI 自动入库
         </label>
-        <label>
-          放行门槛
-          <select
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value)}
-          >
-            {["85", "70", "55"].map((n, i) => (
-              <option key={n} value={n}>
-                {["严格", "标准", "宽松"][i]} · ≥ {n} 分
-              </option>
-            ))}
-          </select>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={ai}
+            onChange={(e) => setAI(e.target.checked)}
+          />
+          启用 AI 分析
         </label>
+        <Field
+          label="放行门槛"
+          type="number"
+          value={threshold}
+          onChange={setThreshold}
+        />
+        <p>
+          低于 {low} 分过滤，{low} 至 {Number(threshold) - 1} 分人工复核，达到{" "}
+          {threshold} 分核对自动入库条件。
+        </p>
+        {d.editorial.by_category.map((r) => (
+          <Field
+            key={r.category}
+            label={r.category + "每日目标"}
+            type="number"
+            value={targets[r.category] || ""}
+            onChange={(v) => setTargets({ ...targets, [r.category]: v })}
+          />
+        ))}
         <Field
           type="number"
           label="低于此分过滤"
@@ -314,7 +475,15 @@ function Policy({
           disabled={a.busy}
           onClick={() =>
             a.run(async () => {
-              await request("monitor/policy", { enabled, threshold, low });
+              await request("monitor/policy", {
+                enabled,
+                ai_enabled: ai,
+                threshold,
+                low,
+                category_targets: Object.fromEntries(
+                  Object.entries(targets).filter(([, v]) => v !== ""),
+                ),
+              });
               refresh();
             })
           }
@@ -372,6 +541,7 @@ function Entry({ s, d }: { s: Session; d: MonitorData }) {
               });
               set({
                 ...f,
+                capture_method: "AI 辅助录入",
                 ...Object.fromEntries(
                   [
                     "title",
@@ -552,6 +722,77 @@ export default function Monitor({ s }: { s: Session }) {
         {tab === tabs[1] && (
           <>
             <h2>覆盖度与五件套补全</h2>
+            <p>
+              每个信源在所选时段内按原文链接去重。近七日至少{" "}
+              {m.editorial.minimum_observations} 篇、噪音率达{" "}
+              {m.editorial.high_noise_rate}%
+              的定时源暂按每周一次采集，人工采集仍可使用。
+            </p>
+            {m.sources
+              .filter((x) => x.scheduled && x.noise_week?.high_noise)
+              .map((x) => (
+                <p key={x.id}>
+                  {x.name} · 本周降频 · 噪音 {x.noise_week!.noise} /{" "}
+                  {x.noise_week!.total}
+                </p>
+              ))}
+            <p>
+              最近一次采集失败的信源 {m.editorial.failed_sources} 个
+              {m.editorial.failed_names.length
+                ? "（" + m.editorial.failed_names.join("、") + "）"
+                : ""}
+              。最早待审{" "}
+              {m.editorial.oldest_pending
+                ? new Date(m.editorial.oldest_pending).toLocaleString() +
+                  "（已等待 " +
+                  m.editorial.pending_hours +
+                  " 小时）"
+                : "暂无"}
+              。
+            </p>
+            {m.editorial.by_category.map((r) => (
+              <p key={r.category}>
+                {r.category} · 今日采集 {r.observed} / {r.target ?? "未设目标"}
+              </p>
+            ))}
+            {[
+              ["今日", m.editorial.daily],
+              ["近七日", m.editorial.weekly],
+            ].map(([label, report]) => {
+              const r = report as NoiseReport;
+              return (
+                <details key={String(label)} open={label === "近七日"}>
+                  <summary>
+                    {String(label)}噪音结构 · {r.noise} / {r.total} 条
+                  </summary>
+                  <p>
+                    人工回标 {r.feedback} 条。
+                    {r.reasons
+                      .map((x) => x.noise_reason + " " + x.count + " 条")
+                      .join(" · ")}
+                  </p>
+                  {r.sources.length ? (
+                    r.sources.map((x) => (
+                      <p key={x.source_id}>
+                        {x.source__name} · {x.noise}/{x.total} · {x.rate}%
+                      </p>
+                    ))
+                  ) : (
+                    <Empty>本期尚无采集判定</Empty>
+                  )}
+                </details>
+              );
+            })}
+            <details>
+              <summary>最近逐条判定与排除词</summary>
+              {m.editorial.decisions.map((x, i) => (
+                <p key={i}>
+                  {x.title} · {x.outcome} · {x.noise_reason || x.filtered_by} ·{" "}
+                  {x.terms.join("、")} · {x.source_zone} · {x.actor} ·{" "}
+                  {new Date(x.at).toLocaleString()}
+                </p>
+              ))}
+            </details>
             <div className="snapshot">
               {Object.entries(m.coverage).map(([k, v]) => (
                 <div key={k}>

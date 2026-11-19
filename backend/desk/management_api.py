@@ -8,9 +8,18 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from .api import endpoint
+from .coverage import coverage_detail, registered_source
+from .editorial import (
+    SCOPE,
+    MEDIA_SECTIONS,
+    AUTHORITY_SECTIONS,
+    source_block,
+    blocked_location,
+    assess,
+)
 from .domain import require, media_row, event_row, query_events, bounded_int
 from .events_api import page_rows
-from .models import Article, Media, Source, Rule, Policy, Change, Run
+from .models import Article, Media, Source, Rule, Policy, Change, Run, IntakeDecision
 from .catalog import MARKET_SECTIONS, CHANNELS, CATEGORIES, FOCUS, LEVELS
 from .collection import ADAPTERS, COUNTERS, enqueue, inference, verified_for_schedule
 from .snapshots import consistent_read, project_events, freeze, load, filter_media
@@ -68,11 +77,45 @@ class SourceSerializer(serializers.ModelSerializer):
         adapter = data.get(
             "adapter", self.instance.adapter if self.instance else "html"
         )
+        value = lambda key, default: data.get(key, getattr(self.instance, key, default))
+        candidate = Source(
+            name=value("name", ""),
+            url=value("url", ""),
+            adapter=adapter,
+            zone=value("zone", ""),
+            profile=profile,
+        )
+        if (
+            value("enabled", True)
+            and adapter != "人工"
+            and (
+                blocked := source_block(
+                    candidate,
+                    bool(
+                        self.instance
+                        and self.instance.url == candidate.url
+                        and registered_source(self.instance)
+                    ),
+                )
+            )
+        ):
+            raise serializers.ValidationError("该来源不能启用：" + blocked)
+        if self.instance and self.instance.archived:
+            raise serializers.ValidationError("已移出的信源保留在审核历史中。")
+        if value("enabled", True) is False:
+            data["scheduled"] = False
         if profile.get("documents") and adapter != "html":
             raise serializers.ValidationError("年度目录只支持公开网页。")
-        altered = self.instance and any(
-            k in data and data[k] != getattr(self.instance, k)
-            for k in ("url", "profile", "adapter")
+
+        def structural_profile(value):
+            return {key: v for key, v in value.items() if key != "cadence"}
+
+        altered = self.instance and (
+            any(
+                k in data and data[k] != getattr(self.instance, k)
+                for k in ("url", "adapter", "zone")
+            )
+            or structural_profile(profile) != structural_profile(self.instance.profile)
         )
         if altered and data.get("scheduled"):
             raise serializers.ValidationError(
@@ -87,6 +130,11 @@ class SourceSerializer(serializers.ModelSerializer):
                 )
         return data
 
+    def validate_zone(self, value):
+        if value and value not in SCOPE:
+            raise serializers.ValidationError("采集栏目未核验。")
+        return value
+
     def validate_profile(self, value):
         from .crawl import validate_profile
 
@@ -98,6 +146,7 @@ class SourceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Source
         fields = "__all__"
+        read_only_fields = ["archived"]
 
     def validate_url(self, value):
         return normalize_url(value)
@@ -114,6 +163,18 @@ class RuleSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ["hits"]
 
+    def validate_media_category(self, value):
+        if value and value not in CATEGORIES:
+            raise serializers.ValidationError("机构品类无效。")
+        return value
+
+    def validate_category(self, value):
+        from .catalog import EVENTS
+
+        if value and value not in EVENTS:
+            raise serializers.ValidationError("事件类别无效。")
+        return value
+
     def validate_kind(self, value):
         if value not in ("主体词", "动作词", "排除词"):
             raise serializers.ValidationError("规则类型无效。")
@@ -126,8 +187,12 @@ def save_form(cls, payload, instance=None):
     return form.save()
 
 
-@endpoint(["GET", "POST", "PATCH"])
+@endpoint(["GET", "POST", "PATCH"], personal="follow")
 def archives(req, pk=None):
+    if req.method == "POST" and pk and req.data.get("action") == "metric":
+        from .media_indicators import save_metric
+
+        return Response(save_metric(req.user, pk, req.data))
     if req.method == "POST" and pk and req.data.get("action") == "follow":
         m = Media.objects.get(pk=pk)
         if req.data.get("on") is True:
@@ -146,11 +211,28 @@ def archives(req, pk=None):
         return Response(media_row(m))
     if pk:
         m = Media.objects.get(pk=pk)
-        qs = query_events(req.user, {"media": m.pk})
+        from django.db.models import F
+
+        qs = query_events(req.user, {"media": m.pk}).order_by(
+            F("occurred").desc(nulls_last=True), "-pk"
+        )
         return Response(
             {
                 **media_row(m),
                 "following": m.followers.filter(pk=req.user.pk).exists(),
+                "peers": list(
+                    Media.objects.filter(category=m.category, subcategory=m.subcategory)
+                    .exclude(pk=m.pk)
+                    .order_by("name", "pk")
+                    .values("id", "name")[:2]
+                )
+                if m.category
+                else [],
+                "metrics": list(
+                    m.metrics.order_by("-day", "kind").values(
+                        "kind", "value", "unit", "day", "source_url"
+                    )
+                ),
                 "origin_record": m.origin_record,
                 "verification": m.verification,
                 "reviewed_sources": list(
@@ -208,7 +290,7 @@ def ops(user):
 @endpoint(["GET"])
 def monitoring(req):
     ops(req.user)
-    sources = list(Source.objects.order_by("name").values())
+    sources = list(Source.objects.filter(archived=False).order_by("name").values())
     rules = list(Rule.objects.order_by("kind", "word").values())
     runs = list(
         Run.objects.select_related("source")
@@ -238,12 +320,18 @@ def monitoring(req):
     ]
     return Response(
         {
+            "editorial": coverage_detail(sources, policy),
             "sources": sources,
             "rules": rules,
             "runs": runs,
             "adapters": ADAPTERS,
+            "section_options": {
+                "媒体官网": list(MEDIA_SECTIONS),
+                **{k: [v] for k, v in zip(SCOPE[1:], AUTHORITY_SECTIONS)},
+            },
             "policy": {
                 "enabled": policy.enabled,
+                "ai_enabled": policy.ai_enabled,
                 "threshold": policy.threshold,
                 "low": policy.low,
             },
@@ -253,15 +341,18 @@ def monitoring(req):
                 "关联信源机构": len(
                     {row["media_id"] for row in sources if row["media_id"]}
                     | set(
-                        Source.coverage_media.through.objects.values_list(
-                            "media_id", flat=True
-                        )
+                        Source.coverage_media.through.objects.filter(
+                            source__archived=False
+                        ).values_list("media_id", flat=True)
                     )
                 ),
                 "在库机构": len(media),
                 "启用信源": sum(row["enabled"] for row in sources),
                 "信源总数": len(sources),
                 "定时信源": sum(row["enabled"] and row["scheduled"] for row in sources),
+                "定时且当前可采": sum(
+                    row["collectible"] and row["scheduled"] for row in sources
+                ),
                 "曾完成采集的信源": Run.objects.filter(
                     state="done", source_id__isnull=False
                 )
@@ -326,6 +417,22 @@ def collection_batch(req):
             "finished": finished,
             "complete": complete,
             "event_count": len(rows),
+            "rejections": list(
+                IntakeDecision.objects.filter(
+                    Q(outcome="filtered")
+                    | Q(outcome="blocked", filtered_by="信源黑名单"),
+                    run_id__in=[j["id"] for j in jobs],
+                )
+                .order_by("run_id", "pk")
+                .values(
+                    "title",
+                    "url",
+                    "filtered_by",
+                    "terms",
+                    "noise_reason",
+                    "source__name",
+                )[:100]
+            ),
             "snapshot": freeze(req.user, "approved", rows).pk if rows else None,
         }
     )
@@ -334,6 +441,19 @@ def collection_batch(req):
 @endpoint(["POST"])
 def operations(req, action):
     data = req.data
+    if action == "archive-source":
+        require(req.user, "configure")
+        with transaction.atomic():
+            source = Source.objects.select_for_update().get(pk=data.get("id"))
+            source.enabled, source.scheduled, source.archived = False, False, True
+            source.stop_reason = str(data.get("reason") or "编辑移出采集范围")[:240]
+            source.save()
+            Change.objects.create(
+                actor=req.user.username,
+                action="移除信源",
+                detail={"source": source.pk, "reason": source.stop_reason},
+            )
+        return Response({"ok": True})
     if action in ("source", "rule", "policy"):
         require(req.user, "configure")
         with transaction.atomic():
@@ -343,6 +463,17 @@ def operations(req, action):
                 policy.low = bounded_int(data.get("low", 40), 0, policy.threshold - 1)
                 if type(data.get("enabled")) is not bool:
                     raise ValidationError("请指定策略开关。")
+                if "ai_enabled" in data:
+                    if type(data["ai_enabled"]) is not bool:
+                        raise ValidationError("AI 开关无效。")
+                    policy.ai_enabled = data["ai_enabled"]
+                if "category_targets" in data:
+                    targets = data["category_targets"]
+                    if not isinstance(targets, dict) or set(targets) - set(CATEGORIES):
+                        raise ValidationError("目标品类无效。")
+                    policy.category_targets = {
+                        k: bounded_int(v, 0, 100000) for k, v in targets.items()
+                    }
                 policy.enabled = data["enabled"]
                 policy.save()
             else:
@@ -402,9 +533,24 @@ def operations(req, action):
     if action == "extract":
         text = str(data.get("text", ""))
         title = ""
+        if not Policy.objects.get_or_create(pk=1)[0].ai_enabled:
+            raise ValidationError("当前已关闭 AI 分析。")
+        if blocked_location(data.get("url", "")):
+            raise ValidationError("该原文来自禁采栏目。")
         if not text and data.get("url"):
             _, title, text = document(data["url"])
         if not text:
             raise ValidationError("请输入正文或有效链接。")
-        return Response(inference(title, text))
+        verdict = assess(title or text[:130], text)
+        if verdict["reason"]:
+            raise ValidationError("已过滤：" + verdict["reason"])
+        analysis = inference(title, text)
+        if (
+            analysis["is_noise"]
+            or analysis["subject_type"] == "第三方企业机构"
+            or analysis["event_nature"]
+            in ("招标采购", "招聘", "广告招商", "第三方新闻")
+        ):
+            raise ValidationError("AI 判定噪音：" + analysis["ai_reasoning"])
+        return Response(analysis)
     raise ValidationError("未知操作。")

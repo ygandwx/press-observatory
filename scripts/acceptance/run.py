@@ -6,6 +6,8 @@ import os
 import secrets
 import signal
 import socket
+import shutil
+import tempfile
 import subprocess
 import sys
 import threading
@@ -55,13 +57,16 @@ class ModelFixture(BaseHTTPRequestHandler):
             answer = {
                 "title": item.get("title") or "合成晚报改版手记",
                 "summary": "隔离模型生成的合成摘要",
-                "relevant": True,
-                "score": 96,
+                "subject_type": "媒体自身",
+                "event_nature": "技术 AI",
+                "relevance_score": 96,
+                "is_noise": False,
+                "noise_reason": "",
                 "category": "技术类",
                 "subtype": "",
                 "importance": "常规",
-                "occurred": "",
-                "reasoning": "合成机构调整自身业务",
+                "occurred": "2026-11-18",
+                "ai_reasoning": "合成机构调整自身业务",
             }
         data = json.dumps(
             {
@@ -153,7 +158,10 @@ def main():
             )
             if k in os.environ
         }
+        fixed_dist = Path(stack.enter_context(tempfile.TemporaryDirectory())) / "dist"
+        shutil.copytree(FRONT / "dist", fixed_dist)
         env.update(
+            WEB_DIST=str(fixed_dist),
             POSTGRES_HOST="127.0.0.1",
             POSTGRES_PORT=port,
             POSTGRES_USER=user,

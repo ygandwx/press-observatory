@@ -1,13 +1,24 @@
-from django.utils import timezone
+import re
+from secrets import compare_digest
+
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
 from .api import endpoint
 from .domain import parse_day
-from .models import Report
-from .reports import generate, report_action, report_row
 from .events_api import page_rows
+from .models import Report
+from .reports import (
+    generate,
+    report_action,
+    report_row,
+    weekly_share_key,
+    weekly_share_views,
+)
 
 
 def can_manage(user):
@@ -60,12 +71,22 @@ def reports(req, pk=None):
             edition = r.editions.get(version=req.GET["edition"])
             row.update(
                 content=edition.content,
+                headline=edition.content["headline"],
                 version=edition.version,
                 issued=edition.issued,
                 issuer=edition.issuer,
                 state="published",
                 share=None,
+                share_views=None,
             )
+            if (
+                req.user.has_perm("desk.sign")
+                and r.kind == "weekly"
+                and r.state in ("published", "archived")
+            ):
+                row["share_management_version"] = r.version
+                if r.share_token:
+                    row["share_views"] = weekly_share_views(r, edition.version)
         return Response(row)
     for key in ("kind", "state"):
         if req.GET.get(key):
@@ -103,8 +124,42 @@ def reports(req, pk=None):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public(req, token):
-    r = Report.objects.get(share_token=token, state__in=["published", "archived"])
-    e = r.editions.latest("version")
+    view = None
+    scoped = re.fullmatch(
+        r"w-(\d{1,15})-(\d{1,15})-(leader|detail)-[0-9a-f]{64}", token
+    )
+    if scoped:
+        pk, version, view = scoped.groups()
+        r = Report.objects.get(
+            pk=pk,
+            kind="weekly",
+            state__in=["published", "archived"],
+            share_token__isnull=False,
+        )
+        if not compare_digest(token, weekly_share_key(r, int(version), view)):
+            raise NotFound()
+        e = r.editions.get(version=version)
+    else:
+        r = Report.objects.get(share_token=token, state__in=["published", "archived"])
+        e = r.editions.latest("version")
+    content = e.content
+    if view == "leader":
+        content = {
+            **content,
+            "events": [
+                {k: v for k, v in row.items() if k in ("id", "title", "sources")}
+                for row in content["events"]
+            ],
+        }
+        if "week_comparison" in content:
+            content["week_comparison"] = {
+                k: v for k, v in content["week_comparison"].items() if k != "categories"
+            }
+        if "geo_progress" in content:
+            content["geo_progress"] = [
+                {k: v for k, v in row.items() if k in ("id", "title", "sources")}
+                for row in content["geo_progress"]
+            ]
     return Response(
         {
             "id": r.pk,
@@ -114,6 +169,7 @@ def public(req, token):
             "issuer": e.issuer,
             "issued": e.issued,
             "state": "published",
-            "content": e.content,
+            "content": content,
+            "view": view,
         }
     )

@@ -34,6 +34,9 @@ class Media(models.Model):
 
 
 class Source(models.Model):
+    zone = models.CharField(max_length=40, blank=True)
+    stop_reason = models.CharField(max_length=240, blank=True)
+    archived = models.BooleanField(default=False)
     name = models.CharField(max_length=200, unique=True)
     media = models.ForeignKey(Media, null=True, on_delete=models.SET_NULL)
     url = models.URLField(max_length=1500)
@@ -56,6 +59,7 @@ class CrawlHost(models.Model):
 
 
 class Rule(models.Model):
+    media_category = models.CharField(max_length=80, blank=True)
     word = models.CharField(max_length=100)
     kind = models.CharField(max_length=20)
     category = models.CharField(max_length=40, blank=True)
@@ -69,8 +73,10 @@ class Rule(models.Model):
 
 
 class Policy(models.Model):
+    ai_enabled = models.BooleanField(default=True)
+    category_targets = models.JSONField(default=dict, blank=True)
     enabled = models.BooleanField(default=False)
-    threshold = models.PositiveIntegerField(default=85)
+    threshold = models.PositiveIntegerField(default=80)
     low = models.PositiveIntegerField(default=40)
 
 
@@ -85,6 +91,13 @@ class Article(models.Model):
 
 
 class Event(models.Model):
+    subject_type = models.CharField(max_length=32, blank=True)
+    event_nature = models.CharField(max_length=32, blank=True)
+    is_noise = models.BooleanField(default=False)
+    noise_reason = models.CharField(max_length=40, blank=True)
+    filtered_by = models.CharField(max_length=40, blank=True)
+    source_zone = models.CharField(max_length=80, blank=True)
+    capture_method = models.CharField(max_length=30, blank=True)
     title = models.CharField(max_length=500)
     summary = models.TextField(blank=True)
     media = models.ManyToManyField(Media, related_name="events")
@@ -194,3 +207,42 @@ class SemanticRun(models.Model):
     result = models.ForeignKey(
         FrozenList, null=True, related_name="+", on_delete=models.CASCADE
     )
+
+
+class IntakeDecision(models.Model):
+    run = models.ForeignKey(Run, null=True, on_delete=models.PROTECT)
+    source = models.ForeignKey(Source, null=True, on_delete=models.PROTECT)
+    event = models.ForeignKey(Event, null=True, on_delete=models.PROTECT)
+    url = models.TextField(blank=True)
+    title = models.CharField(max_length=500, blank=True)
+    source_zone = models.CharField(max_length=80, blank=True)
+    outcome = models.CharField(max_length=24)
+    filtered_by = models.CharField(max_length=40, blank=True)
+    noise_reason = models.CharField(max_length=40, blank=True)
+    terms = models.JSONField(default=list)
+    analysis = models.JSONField(default=dict)
+    actor = models.CharField(max_length=150)
+    at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "url"], name="one_intake_decision_per_run_url"
+            )
+        ]
+
+
+class MediaMetric(models.Model):
+    media = models.ForeignKey(Media, related_name="metrics", on_delete=models.PROTECT)
+    kind = models.CharField(max_length=12)
+    day = models.DateField()
+    value = models.DecimalField(max_digits=20, decimal_places=4)
+    unit = models.CharField(max_length=16)
+    source_url = models.URLField(max_length=1500)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["media", "kind", "day"], name="one_metric_per_period"
+            )
+        ]

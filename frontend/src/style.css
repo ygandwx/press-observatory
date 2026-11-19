@@ -237,7 +237,7 @@ header time {
   gap: 12px;
 }
 .metrics {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 26px;
 }
 .metrics > a,
@@ -1001,4 +1001,89 @@ h3 {
 .evidence small {
   display: inline-block;
   margin-left: 6px;
+}
+.alert-strip {
+  border-left: 5px solid #a43232;
+  background: #fff4f2;
+  color: #842420;
+}
+.alert-strip a {
+  color: #842420;
+}
+.graph-drills a {
+  display: inline-block;
+  margin: 0.35rem 0.8rem 0.35rem 0;
+}
+.auto-share {
+  display: block;
+  margin: 1rem 0;
+  color: #304e67;
+}
+.unavailable-source {
+  color: #666b72 !important;
+  text-decoration: line-through;
+}
+.indicator-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+.indicator-table caption {
+  text-align: left;
+  font-weight: 700;
+  padding: 0.5rem 0;
+}
+.indicator-table td,
+.indicator-table th {
+  padding: 0.4rem;
+  text-align: left;
+  border-bottom: 1px solid #dce2e6;
+}
+.comparison-period {
+  grid-column: 1/-1;
+}
+@media (min-width: 701px) and (max-width: 1023px) {
+  .directory-table,
+  .directory-table tbody,
+  .directory-table tr {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .directory-table thead {
+    display: none;
+  }
+  .directory-table tr {
+    border: 1px solid #dde3e8;
+    border-radius: 7px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: white;
+  }
+  .directory-table td,
+  .directory-table td:last-child {
+    display: inline-block;
+    position: static;
+    box-shadow: none;
+    white-space: normal;
+    border: none;
+  }
+  .directory-table td:first-child {
+    display: block;
+    font-weight: 700;
+  }
+  .directory-scroll {
+    overflow: visible;
+  }
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+  .indicator-table {
+    table-layout: fixed;
+  }
 }

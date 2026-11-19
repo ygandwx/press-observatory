@@ -16,6 +16,7 @@ import { Archives, Archive } from "./Archives";
 import Monitor from "./Monitor";
 import { Accounts } from "./Accounts";
 import { Reports, ReportDetail } from "./Reports";
+import { Geo } from "./Geo";
 import "./style.css";
 const links = [
   ["/", "领导看板", "▦"],
@@ -24,6 +25,7 @@ const links = [
   ["/archives", "媒体档案", "▥"],
   ["/monitor", "监测中心", "◎"],
   ["/briefings", "每周简报", "▧"],
+  ["/geo", "GEO 专题", "◎"],
   ["/accounts", "账号管理", "♙"],
 ];
 function Brand() {
@@ -108,10 +110,12 @@ function App() {
     ) : (
       <Archives s={s} />
     )
-  ) : page === "accounts" && s.role === "维护人员" ? (
+  ) : page === "accounts" && s.role === "运营编辑" ? (
     <Accounts />
   ) : page === "monitor" && ops ? (
     <Monitor s={s} />
+  ) : page === "geo" ? (
+    <Geo s={s} />
   ) : ["summary", "briefings"].includes(page) ? (
     id ? (
       <ReportDetail s={s} id={id} />

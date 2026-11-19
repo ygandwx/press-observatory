@@ -94,6 +94,7 @@ class CrawlPolicyTests(TestCase):
     def setUp(self):
         self.src = Source.objects.create(
             name="报社动态",
+            zone="媒体官网",
             url="https://press.invalid/section",
             profile={
                 "selector": "main a[href]",
@@ -271,7 +272,7 @@ class CrawlPolicyTests(TestCase):
     def test_directory_requires_listed_url_matching_title_and_publisher(self):
         doc = {
             "url": "https://publisher.invalid/public/report",
-            "title": "Press annual report",
+            "title": "报社发布年度社会责任报告",
             "media": "报社",
             "headline_selector": "h1",
             "body_selector": "article",
@@ -295,7 +296,7 @@ class CrawlPolicyTests(TestCase):
                 return (
                     200,
                     {},
-                    b"<h1>Press annual report</h1><article>Original source publication details, dated and signed.</article>",
+                    "<h1>报社发布年度社会责任报告</h1><article>Original source publication details, dated and signed.</article>".encode(),
                 )
             self.fail(url)
 

@@ -10,7 +10,7 @@
 
 | 操作 | 原站依据 | 复刻页面及 API | 浏览器、服务端证据与结果 |
 | --- | --- | --- | --- |
-| 登录、按职责显示入口、退出和直接访问 | 点到身份切换，领导端也可见编辑按钮 | 全站，`session/login/logout` | B02、B03、B04、B06、B07 通过。B09 核对查看人员与维护人员的账号列表、创建与角色切换。独立登录会话覆盖只读、编辑、审核、签发和配置操作。服务端越权和 CSRF 由 `test_role_boundaries`、`test_real_login_requires_csrf_and_logout_ends_session` 验证 |
+| 登录、按职责显示入口、退出和直接访问 | 点到身份切换，领导端也可见编辑按钮 | 全站，`session/login/logout` | B02、B03、B04、B06、B07 通过。B09 核对社领导与运营编辑的账号列表、创建与角色切换。独立登录会话覆盖只读、编辑、审核、签发和配置操作。服务端越权和 CSRF 由 `test_role_boundaries`、`test_real_login_requires_csrf_and_logout_ends_session` 验证 |
 | 看板五项指标、可见范围、下钻及分类参数 | 五卡可见，点到业态类下钻 | `/`，`dashboard → events/media` | B02 通过今日入库和分类跳转。`test_stat_drill_and_date_boundary` 核对八类计数；历史队列、机构字段和归并拆回另有快照回归 |
 | 时间区间、变化提醒、趋势与三种分布 | 研判区、趋势和分布可见，提醒规则见交接 | `/` 看板，`dashboard?days=` | B01、B02 通过三个视口与 7/30/90 天切换，检查四张图实际渲染。提醒采用相对前期至少 3 件且达到 50% 的公开口径 |
 | 研判、重点动态、日报入口和一键采集 | 入口可见 | `/`，`POST dashboard`、`monitor/collect` | B05 验证模型替身返回的研判及本批采集。重点事件/日报使用普通详情链接，原站入口与历史走查见 [README](../README.md)。真实模型的研判质量待业务评阅 |
@@ -81,7 +81,7 @@ python scripts/acceptance/run.py
 
 ## 媒体档案专项
 
-B03 核对比较、维护人员关注与编辑、查看人员的按钮可见性。B09 核对三个档案页签及账号角色变更。后端 `DirectoryImportTests` 覆盖预检、整批回滚、重复导入、全字段导出、分页无重复、已有信源和待审关联、最后维护账号保护及越权拒绝。实际名册核对口径见[档案迁移说明](archive-directory.md)。
+B03 核对比较、运营编辑关注与编辑、社领导的按钮可见性。B09 核对三个档案页签及账号角色变更。后端 `DirectoryImportTests` 覆盖预检、整批回滚、重复导入、全字段导出、分页无重复、已有信源和待审关联、最后维护账号保护及越权拒绝。实际名册核对口径见[档案迁移说明](archive-directory.md)。
 
 
 ## 档案证据和栏目采集

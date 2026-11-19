@@ -16,6 +16,7 @@ import {
   useAction,
 } from "./shared";
 import type { Session, Page } from "./shared";
+import type { TopicEntry } from "./Geo";
 type Entry = {
   id: number;
   title: string;
@@ -41,6 +42,13 @@ type Content = {
   section_order?: string[];
   section_events?: Record<string, number[]>;
   unclassified?: { id: number; media: string[] }[];
+  geo_progress?: TopicEntry[];
+  correction?: {
+    previous_edition: number;
+    reason: string;
+    removed: number[];
+    added: number[];
+  };
   special: Record<string, string[]>;
   snapshot: Record<string, number>;
   events: Entry[];
@@ -54,6 +62,9 @@ type Report = {
   issued: string;
   state: string;
   share?: string;
+  share_views?: Record<"leader" | "detail", string>;
+  share_management_version?: number;
+  view?: "leader" | "detail";
   headline?: string;
   content: Content;
   history?: { version: number; issuer: string; issued: string }[];
@@ -192,6 +203,12 @@ export function Reports({ s, weekly }: { s: Session; weekly: boolean }) {
                   期
                 </a>
                 <p>{r.headline}</p>
+                {weekly && (
+                  <p>
+                    <a href={path + "/" + r.id + "?view=leader"}>领导参阅版</a>{" "}
+                    · <a href={path + "/" + r.id + "?view=detail"}>业务详版</a>
+                  </p>
+                )}
                 <small>
                   {r.day} · {r.issuer || "尚未签发"}
                 </small>
@@ -288,8 +305,9 @@ export function ReportDetail({
   id?: string;
   token?: string;
 }) {
-  const [edition, setEdition] = useState(""),
-    [mode, setMode] = useState("领导参阅版"),
+  const [edition, setEdition] = useState(query.edition || ""),
+    [view, setView] = useState(query.view === "detail" ? "detail" : "leader"),
+    [correctionReason, setCorrectionReason] = useState(""),
     [editing, edit] = useState(false),
     a = useAction(),
     paper = useRef<HTMLElement>(null);
@@ -300,11 +318,22 @@ export function ReportDetail({
   const r = d.data,
     c = r.content,
     weekly = r.kind === "weekly",
+    mode = (r.view || view) === "detail" ? "业务详版" : "领导参阅版",
+    signedVersion =
+      !edition && ["published", "archived"].includes(r.state)
+        ? (r.history?.[0]?.version ?? r.version)
+        : r.version,
+    fileName = weekly
+      ? "纸媒周报-" + mode + "-" + r.day + "-v" + signedVersion
+      : "纸媒业态-" + r.day,
     canEdit = !edition && s?.rights.includes("edit"),
     sign = !edition && s?.rights.includes("sign");
   const call = (action: string) =>
     a.run(async () => {
-      await request("reports/" + id, { action, version: r.version });
+      await request("reports/" + id, {
+        action,
+        version: r.share_management_version ?? r.version,
+      });
       d.refresh();
     });
   const list = (items: string[], empty: string) =>
@@ -364,7 +393,7 @@ export function ReportDetail({
               if (paper.current)
                 await (
                   await import("./pdf")
-                ).savePaper(paper.current, "纸媒业态-" + r.day);
+                ).savePaper(paper.current, fileName);
             }, "PDF 已生成")
           }
         >
@@ -380,7 +409,7 @@ export function ReportDetail({
                 pixelRatio: 1.5,
               });
               const link = document.createElement("a");
-              link.download = "纸媒业态-" + r.day + ".png";
+              link.download = fileName + ".png";
               if (!blob) throw new Error("长图生成失败。");
               const href = URL.createObjectURL(blob);
               link.href = href;
@@ -416,6 +445,32 @@ export function ReportDetail({
                 重新生成
               </button>
             )}
+            {!!r.history?.length && (
+              <details>
+                <summary>按当前已批准事件重建更正稿</summary>
+                <Field
+                  label="更正依据"
+                  value={correctionReason}
+                  onChange={setCorrectionReason}
+                />
+                <button
+                  disabled={a.busy || !correctionReason.trim()}
+                  onClick={() =>
+                    a.run(async () => {
+                      await request("reports/" + id, {
+                        action: "rebuild_correction",
+                        version: r.version,
+                        reason: correctionReason.trim(),
+                      });
+                      setCorrectionReason("");
+                      d.refresh();
+                    })
+                  }
+                >
+                  重建草稿内容与引用
+                </button>
+              </details>
+            )}
             <button disabled={a.busy} onClick={() => call("submit")}>
               提交签发
             </button>
@@ -448,7 +503,26 @@ export function ReportDetail({
             )}
           </>
         )}
-        {r.share && (
+        {edition && r.share_management_version != null && (
+          <button
+            disabled={a.busy}
+            onClick={() => call(r.share_views ? "revoke" : "share")}
+          >
+            {r.share_views ? "撤销本周报全部分享" : "启用此签发版本的只读分享"}
+          </button>
+        )}
+        {r.share_views &&
+          (["leader", "detail"] as const).map((k) => (
+            <a
+              key={k}
+              href={"/share/" + r.share_views![k]}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {k === "leader" ? "领导参阅版只读链接" : "业务详版只读链接"} ↗
+            </a>
+          ))}
+        {r.share && !weekly && (
           <a href={"/share/" + r.share} target="_blank" rel="noreferrer">
             打开只读链接 ↗
           </a>
@@ -464,13 +538,19 @@ export function ReportDetail({
           }}
         />
       )}
-      {weekly && (
+      {weekly && !r.view && (
         <div className="seg">
           {["领导参阅版", "业务详版"].map((m) => (
             <button
               key={m}
               aria-pressed={m === mode}
-              onClick={() => setMode(m)}
+              onClick={() => {
+                const v = m === "业务详版" ? "detail" : "leader";
+                setView(v);
+                const link = new URL(location.href);
+                link.searchParams.set("view", v);
+                window.history.replaceState(null, "", link);
+              }}
             >
               {m}
             </button>
@@ -492,9 +572,19 @@ export function ReportDetail({
                 }).format(new Date(c.start + "T12:00:00+08:00"))}
             　{weekly ? mode : states[r.state]}
           </p>
-          <small>{r.issuer ? "签发人 " + r.issuer : "尚未签发"}</small>
+          <small>
+            {r.issuer
+              ? "签发人 " + r.issuer + " · 签发版本 " + signedVersion
+              : "尚未签发"}
+          </small>
         </div>
         <blockquote>{c.headline}</blockquote>
+        {c.correction && (
+          <p>
+            据签发版本 {c.correction.previous_edition} 更正 ·{" "}
+            {c.correction.reason}
+          </p>
+        )}
         {weekly && c.week_comparison && (
           <section>
             <h2>入库变化</h2>
@@ -523,6 +613,35 @@ export function ReportDetail({
                   )}
                 </ul>
               </>
+            )}
+          </section>
+        )}
+        {weekly && c.geo_progress && (
+          <section>
+            <h2>本周 GEO 进展</h2>
+            {c.geo_progress.length ? (
+              <>
+                <p>本周收录 {c.geo_progress.length} 件专题事件。</p>
+                <ul>
+                  {(mode === "领导参阅版"
+                    ? c.geo_progress.slice(0, 3)
+                    : c.geo_progress
+                  ).map((e) => (
+                    <li key={e.id}>
+                      <a href={"#event-" + e.id}>{e.title}</a>
+                      {mode === "业务详版" && (
+                        <p>
+                          {e.media.map((m) => m.name).join("、")} · {e.category}{" "}
+                          · {e.matches.map((m) => m.term).join("、")} ·{" "}
+                          {e.summary}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>本周没有已核实的 GEO 进展。</p>
             )}
           </section>
         )}
@@ -586,7 +705,11 @@ export function ReportDetail({
       {!!r.history?.length && (
         <label className="edition">
           签发版本
-          <select value={edition} onChange={(e) => setEdition(e.target.value)}>
+          <select
+            aria-label="签发版本"
+            value={edition}
+            onChange={(e) => setEdition(e.target.value)}
+          >
             <option value="">当前稿</option>
             {r.history.map((h) => (
               <option key={h.version} value={h.version}>

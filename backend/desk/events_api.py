@@ -1,38 +1,40 @@
-import csv
 from collections import Counter
 from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse
-from django.utils import timezone
 from django.shortcuts import get_object_or_404
-from rest_framework.response import Response
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from .api import endpoint
+from rest_framework.response import Response
+
 from . import semantic as search_service
-from .snapshots import (
-    consistent_read,
-    project_events,
-    project_media,
-    freeze,
-    load,
-    filter_events,
-)
+from .api import endpoint
+from .catalog import EVENTS, IMPORTANCE
+from .dashboard_metrics import business_alerts, stock_comparisons
 from .domain import (
-    require,
-    query_events,
-    event_row,
     bounded_int,
-    record,
-    review,
+    check_state,
+    check_version,
+    event_row,
     merge,
     parse_day,
-    check_version,
-    check_state,
+    query_events,
+    record,
+    require,
+    review,
 )
-from .models import Event, Change, Insight
-from .catalog import EVENTS, IMPORTANCE
-from .external import analyze, document, ExternalError
+from .event_export import export_events
+from .external import ExternalError, analyze, document
+from .models import Change, Event, Insight, Report
+from .snapshots import (
+    consistent_read,
+    filter_events,
+    freeze,
+    load,
+    project_events,
+    project_media,
+)
 
 
 def page_rows(req, qs, transform):
@@ -63,7 +65,7 @@ def events(req):
         rows = filter_events(frozen.rows, req.GET)
         if ids is not None:
             rows = [r for r in rows if r["id"] in ids]
-        if req.GET.get("export") != "csv":
+        if req.GET.get("export") not in ("csv", "excel"):
             return Response(page_rows(req, rows, lambda row: row))
     else:
         qs = query_events(req.user, req.GET).prefetch_related(
@@ -71,43 +73,20 @@ def events(req):
         )
         if ids is not None:
             qs = qs.filter(pk__in=ids)
-        if req.GET.get("export") != "csv":
+        if req.GET.get("export") not in ("csv", "excel"):
             return Response(page_rows(req, qs, lambda e: event_row(e, req.user)))
         rows = (event_row(e, req.user) for e in qs.iterator(chunk_size=100))
-    response = HttpResponse(content_type="text/csv; charset=utf-8-sig")
-    response["Content-Disposition"] = 'attachment; filename="events.csv"'
-    response.write("\ufeff")
-    writer = csv.writer(response)
-    writer.writerow(["事件编号", "标题", "分类", "发生日", "机构", "摘要", "原文"])
-    for row in rows:
-        vals = [
-            row["id"],
-            row["title"],
-            row["category"],
-            row["occurred"],
-            "、".join(m["name"] for m in row["media"]),
-            row["summary"],
-            " ".join(a["url"] for a in row["articles"]),
-        ]
-        writer.writerow(
-            [
-                ("'" + v if v.lstrip().startswith(("=", "+", "-", "@")) else v)
-                if isinstance(v, str)
-                else v
-                for v in vals
-            ]
-        )
-    return response
+    return export_events(rows, req.GET["export"])
 
 
 def visible(req, pk):
-    qs = Event.objects.all()
+    qs = Event.objects.exclude(state="archived")
     if not (req.user.has_perm("desk.review") or req.user.has_perm("desk.edit")):
         qs = qs.filter(state="approved")
     return get_object_or_404(qs, pk=pk)
 
 
-@endpoint(["GET", "POST"])
+@endpoint(["GET", "POST"], personal="star")
 def event_detail(req, pk):
     e = visible(req, pk)
     if req.method == "POST":
@@ -117,6 +96,10 @@ def event_detail(req, pk):
                 e.stars.add(req.user)
             else:
                 e.stars.remove(req.user)
+        elif action == "feedback":
+            from .event_feedback import review_automatic
+
+            e = review_automatic(req.user, pk, req.data)
         elif action in ("merge", "split"):
             merge(
                 req.user,
@@ -152,6 +135,17 @@ def event_detail(req, pk):
                     sub,
                     importance,
                 )
+                if "tags" in req.data:
+                    tags = req.data["tags"]
+                    if (
+                        not isinstance(tags, list)
+                        or len(tags) > 20
+                        or any(
+                            not isinstance(tag, str) or len(tag) > 100 for tag in tags
+                        )
+                    ):
+                        raise ValidationError("趋势标签最多20个，每个不超过100字。")
+                    e.tags = list(dict.fromkeys(t.strip() for t in tags if t.strip()))
                 e.summary = str(req.data.get("summary", e.summary))[:6000]
                 if "occurred" in req.data:
                     e.occurred = (
@@ -165,6 +159,10 @@ def event_detail(req, pk):
                 Change.objects.create(
                     event=e, actor=req.user.username, action="编辑并提交复核"
                 )
+        elif action == "correct_source":
+            from .event_feedback import correct_source
+
+            e = correct_source(req.user, pk, req.data)
         elif action == "verify":
             require(req.user, "review")
             article = get_object_or_404(e.articles, pk=req.data.get("article"))
@@ -184,6 +182,32 @@ def event_detail(req, pk):
         else:
             raise ValidationError("未知操作。")
     row = event_row(e, req.user)
+    related = query_events(req.user, {}).exclude(pk=e.pk)
+    media_ids = {m["id"] for m in row["media"]}
+    candidates = (
+        related.filter(
+            Q(media__in=media_ids)
+            | Q(merged__media__in=media_ids)
+            | Q(category=e.category)
+        )
+        .distinct()
+        .order_by("-occurred", "-pk")
+    )
+    row["related"] = [
+        {"id": r.pk, "title": r.title, "category": r.category} for r in candidates[:3]
+    ]
+    last_review = (
+        e.changes.filter(action__in=["approve", "reject", "approved", "人工复核"])
+        .order_by("-at", "-pk")
+        .first()
+    )
+    row["can_recheck"] = bool(
+        e.auto
+        and e.state == "approved"
+        and not e.changes.filter(action="approve").exists()
+    )
+    row["reviewer"] = last_review.actor if last_review else ""
+    row["reviewed_at"] = last_review.at if last_review else None
     row["history"] = (
         list(e.changes.order_by("-id").values("action", "actor", "at", "detail"))
         if req.user.has_perm("desk.review")
@@ -199,6 +223,7 @@ def bulk(req):
         req.data.get("items"),
         req.data.get("action"),
         str(req.data.get("reason", "")),
+        str(req.data.get("noise_reason", "")),
     )
     return Response({"ok": True})
 
@@ -272,7 +297,12 @@ def dashboard(req):
         yesterday = str(day - timedelta(days=1))
         prior_today = query_events(
             req.user, {"clock": "approved", "start": yesterday, "end": yesterday}
-        ).count()
+        )
+        prior_auto = prior_today.filter(auto=True).count()
+        prior_count = prior_today.count()
+        today_events = project_events(
+            query_events(req.user, {"start": str(day), "end": str(day)}), req.user
+        )
     period["snapshot"] = freeze(req.user, "approved", approved).pk
     archive_filters = {"snapshot": freeze(req.user, "media", media).pk}
     today_filter = {**period, "start": str(day)}
@@ -293,11 +323,16 @@ def dashboard(req):
             },
             note="待复核事件",
         )
+    stocks = stock_comparisons(
+        req.user, day, {"queue": pending_count, "media": len(media)}
+    )
+    audit_card.update(stocks["queue"])
     cards = [
         {
             "name": "今日入库动态",
             "value": count,
-            "change": count - prior_today,
+            "change": count - prior_count,
+            "comparison": "昨日",
             "path": "/news",
             "filters": today_filter,
         },
@@ -305,19 +340,15 @@ def dashboard(req):
         {
             "name": "媒体档案总数",
             "value": len(media),
+            **stocks["media"],
             "path": "/archives",
             "filters": archive_filters,
         },
         {
-            "name": "重点追踪数",
-            "value": sum(m["focus"] == "重点关注" for m in media),
-            "path": "/archives",
-            "filters": {**archive_filters, "focus": "重点关注"},
-        },
-        {
-            "name": "AI 自动入库占比",
-            "value": f"{auto / count:.0%}" if count else "—",
-            "note": f"{auto} / {count} 件",
+            "name": "今日自动入库数",
+            "value": auto,
+            "change": auto - prior_auto,
+            "comparison": "昨日",
             "path": "/news",
             "filters": {**today_filter, "auto": "1"},
         },
@@ -336,22 +367,38 @@ def dashboard(req):
         str(day - timedelta(days=i)): daily[str(day - timedelta(days=i))]
         for i in reversed(range(span))
     }
-    focused = (
-        Event.objects.filter(state="approved", merged_into=None)
-        .filter(Q(stars=req.user) | Q(importance__in=["重点", "核心"]))
-        .distinct()[:6]
+    focused = list(
+        qs.filter(Q(stars=req.user) | Q(importance__in=["重点", "核心"]))
+        .distinct()
+        .order_by("-approved", "-id")[:3]
     )
+    reports = Report.objects.filter(kind="daily", day=day)
+    if not req.user.has_perm("desk.edit"):
+        reports = reports.filter(editions__isnull=False)
+    todays_report = reports.values_list("pk", flat=True).first()
+    alerts = [
+        {
+            "category": name,
+            "count": len(items),
+            "filters": {"snapshot": freeze(req.user, "approved", items).pk},
+        }
+        for name, items in business_alerts(today_events)
+    ]
     insight = Insight.objects.order_by("-id").first()
     return Response(
         {
             "cards": cards,
             "categories": categories,
             "changes": changes,
-            "alerts": [
-                {"category": k, "change": delta}
-                for k, delta in changes.items()
-                if abs(delta) >= 3 and abs(delta) / max(1, categories[k] - delta) >= 0.5
-            ],
+            "alerts": alerts,
+            "auto_share": {
+                "approved": count,
+                "auto": auto,
+                "filters": {**today_filter, "auto": "1"},
+            },
+            "today_report": f"/summary/{todays_report}"
+            if todays_report
+            else f"/summary?day={day}",
             "period": period,
             "types": types,
             "regions": regions,

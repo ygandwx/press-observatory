@@ -228,10 +228,11 @@ class ProcurementSnapshotTests(TestCase):
                 self.assertEqual(Run.objects.count(), 0)
                 self.assertEqual(Article.objects.count(), 0)
                 call_command("import_procurement_snapshot", index, apply=True)
-                self.assertEqual(Event.objects.get().state, "pending")
+                self.assertFalse(Event.objects.exists())
+                self.assertEqual(Run.objects.get().counts["过滤"], 1)
                 self.assertFalse(verified_for_schedule(self.source))
                 call_command("import_procurement_snapshot", index, apply=True)
-                self.assertEqual((Run.objects.count(), Article.objects.count()), (1, 1))
+                self.assertEqual((Run.objects.count(), Article.objects.count()), (1, 0))
                 (root / "article.html").write_bytes(b"changed")
                 with self.assertRaisesMessage(CommandError, "摘要不符"):
                     call_command("import_procurement_snapshot", index, apply=True)

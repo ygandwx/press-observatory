@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError as ModelValidationError
 from django.db import transaction
 from rest_framework.exceptions import ValidationError, NotFound
 from .external import analyze, ExternalError
-from .models import SemanticRun
+from .models import Event, SemanticRun
 from .domain import query_events, check_state
 from .snapshots import load, freeze, consistent_read, project_events, filter_events
 
@@ -72,6 +72,8 @@ def advance(user, run_id, expected_cursor, model=analyze):
         raise NotFound("检索任务不存在。")
     check_state(user, run.candidates.scope)
     rows = run.candidates.rows
+    if Event.objects.filter(state="archived", pk__in=[r["id"] for r in rows]).exists():
+        raise ValidationError("本次检索包含已归档记录，请重新开始检索。")
     if not run.result_id and run.cursor == expected_cursor:
         items = batch(rows, run.cursor)
         ids = []
