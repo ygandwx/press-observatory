@@ -4,7 +4,7 @@ import csv
 import os
 import re
 import tempfile
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -19,13 +19,13 @@ if (
         "Use the disposable PostgreSQL database created by scripts/acceptance/run.py"
     )
 django.setup()
-from django.contrib.auth.models import Group, User
-from django.core.management import call_command, CommandError
-from django.core.wsgi import get_wsgi_application
-from django.utils import timezone
 from desk import collection, external
 from desk.models import Article, Event, Media, Source
 from desk.reports import generate
+from django.contrib.auth.models import Group, User
+from django.core.management import CommandError, call_command
+from django.core.wsgi import get_wsgi_application
+from django.utils import timezone
 
 ORIGIN = "https://acceptance.invalid"
 AUTO_TITLE = "合成日报上线移动采编工具"
@@ -46,6 +46,89 @@ def fixture_fetch(url, redirects=3):
     else:
         raise external.ExternalError("合成原文不可用。")
     return url, html.encode()
+
+
+def seed_noise_editions(source, today):
+    """Generate two real revisions from older, isolated collection and review records."""
+    from desk.models import Change, IntakeDecision, Run
+    from desk.noise_archive import archive_noise_weeks
+
+    week = today - timedelta(days=today.weekday() + 21)
+    collected = timezone.make_aware(datetime.combine(week, time(9)))
+    run = Run.objects.create(
+        key="synthetic:archived-noise",
+        source=source,
+        trigger="隔离历史样本",
+        state="done",
+        created=collected,
+        finished=collected,
+    )
+
+    # All three events stay outside active lists and queues used by the other
+    # browser cases. Intake decisions supply the dated evidence for this report.
+    def capture(slug, title, noise_reason):
+        article = Article.objects.create(
+            url=ORIGIN + "/quality/" + slug, title=title, source=source
+        )
+        event = Event.objects.create(title=title, state="archived")
+        Event.objects.filter(pk=event.pk).update(created=collected)
+        event.articles.add(article)
+        intake = IntakeDecision.objects.create(
+            run=run,
+            event=event,
+            source=source,
+            url=article.url,
+            title=title,
+            actor="隔离归档采集员",
+            outcome="filtered" if noise_reason else "pending",
+            filtered_by="规则过滤" if noise_reason else "",
+            noise_reason=noise_reason,
+            terms=[noise_reason] if noise_reason else [],
+        )
+        IntakeDecision.objects.filter(pk=intake.pk).update(at=collected)
+        return event, article
+
+    restored, article = capture("restored", "合成归档纠正样本", "广告")
+    capture("procurement", "合成归档采购样本", "招标采购")
+    returned, _ = capture("returned", "合成归档待核样本", "")
+    for n in range(9):
+        observation = IntakeDecision.objects.create(
+            run=run,
+            source=source,
+            title=f"合成归档排除公告 {n + 1}",
+            url=f"{ORIGIN}/quality/archive-{n}",
+            actor="隔离归档采集员",
+            outcome="filtered",
+            filtered_by="规则过滤",
+            noise_reason="招聘",
+            terms=["招聘"],
+        )
+        IntakeDecision.objects.filter(pk=observation.pk).update(at=collected)
+    rejected = Change.objects.create(
+        event=returned,
+        action="reject",
+        actor="隔离归档审核员",
+        detail={"reason": "需要补充来源出处"},
+    )
+    Change.objects.filter(pk=rejected.pk).update(at=collected + timedelta(days=1))
+    archive_noise_weeks(today=week + timedelta(days=7))
+
+    restored_at = collected + timedelta(days=9)
+    correction = IntakeDecision.objects.create(
+        event=restored,
+        source=source,
+        title=restored.title,
+        url=article.url,
+        outcome="pending",
+        filtered_by="人工复核",
+        actor="隔离归档审核员",
+        analysis={
+            "reason": "原文为报社新栏目说明，撤回此前分类",
+            "decision": "restore",
+        },
+    )
+    IntakeDecision.objects.filter(pk=correction.pk).update(at=restored_at)
+    archive_noise_weeks(today=today)
 
 
 def seed():
@@ -156,6 +239,7 @@ def seed():
         generate(editor, "daily", today).pk,
         generate(editor, "weekly", previous).pk,
     )
+    seed_noise_editions(Source.objects.get(name="合成官网"), today)
 
 
 # Replace only the outbound source byte transport, leaving parsing, validation,

@@ -319,26 +319,33 @@ def review(user, items, action, reason="", noise_reason=""):
             ):
                 raise ValidationError("噪音原因无效。")
             e.noise_reason, e.is_noise, e.filtered_by = noise_reason, True, "人工退回"
-            article = e.articles.order_by("pk").first()
-            IntakeDecision.objects.create(
-                event=e,
-                source=article.source if article else None,
-                url=article.url if article else "",
-                title=e.title,
-                source_zone=e.source_zone,
-                outcome="rejected",
-                filtered_by=e.filtered_by,
-                noise_reason=noise_reason,
-                actor=user.get_username(),
-                analysis={"reason": reason},
-            )
+        article = e.articles.order_by("pk").first()
+        audit = IntakeDecision.objects.create(
+            event=e,
+            source=article.source if article else None,
+            url=article.url if article else "",
+            title=e.title,
+            source_zone=e.source_zone,
+            outcome="rejected" if action == "reject" else "confirmed",
+            filtered_by="人工退回" if action == "reject" else "人工审核",
+            noise_reason=noise_reason,
+            actor=user.get_username(),
+            analysis={"reason": reason, "decision": action},
+        )
         e.state = "approved" if action == "approve" else "rejected"
         if action == "approve":
             e.approved = e.approved or timezone.now()
         e.version += 1
         e.save()
         Change.objects.create(
-            event=e, actor=user.get_username(), action=action, detail={"reason": reason}
+            event=e,
+            actor=user.get_username(),
+            action=action,
+            detail={
+                "reason": reason,
+                "noise_reason": noise_reason,
+                "intake_decision": audit.pk,
+            },
         )
 
 

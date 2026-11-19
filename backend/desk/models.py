@@ -246,3 +246,18 @@ class MediaMetric(models.Model):
                 fields=["media", "kind", "day"], name="one_metric_per_period"
             )
         ]
+
+
+class WeeklyNoiseEdition(models.Model):
+    week = models.DateField()
+    version = models.PositiveIntegerField()
+    created = models.DateTimeField(default=timezone.now)
+    digest = models.CharField(max_length=64)
+    content = models.JSONField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["week", "version"], name="one_noise_edition_per_week_version"
+            )
+        ]

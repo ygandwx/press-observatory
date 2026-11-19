@@ -13,6 +13,7 @@ import {
   useData,
 } from "./shared";
 import CollectButton from "./CollectButton";
+import NoiseArchive from "./NoiseArchive";
 import { News } from "./News";
 import type { Session, Dict, EventRow } from "./shared";
 type Source = {
@@ -113,6 +114,7 @@ type MonitorData = {
   pending: number;
   media: { id: number; name: string }[];
 };
+const archiveTab = "周度噪音报告";
 const tabs = [
   "采集概览",
   "覆盖度面板",
@@ -620,33 +622,27 @@ function Entry({ s, d }: { s: Session; d: MonitorData }) {
   );
 }
 export default function Monitor({ s }: { s: Session }) {
+  const availableTabs = s.role === "运营编辑" ? [...tabs, archiveTab] : tabs;
   const [tab, setTab] = useState(
-      tabs.includes(query.tab) ? query.tab : tabs[0],
+      availableTabs.includes(query.tab) ? query.tab : tabs[0],
     ),
     [note, setNote] = useState(""),
     [source, setSource] = useState(""),
-    d = useData<MonitorData>("monitor", 8000),
+    d = useData<MonitorData>(tab === archiveTab ? null : "monitor", 8000),
     a = useAction();
-  if (!d.data || d.error) return <Wait error={d.error} retry={d.refresh} />;
-  const m = d.data,
-    editor = s.rights.includes("edit");
-  const op = (action: string, body: unknown) =>
-    a.run(async () => {
-      await request("monitor/" + action, body);
-      d.refresh();
-    }, "已记录");
-  return (
+  const navigation = (
     <>
       <Heading
         title="监测中心"
         sub="编辑工作台 · 信源管理、采集覆盖与内容审核"
       />
       <div className="tabs">
-        {tabs.map((t) => (
+        {availableTabs.map((t) => (
           <button
             key={t}
             aria-pressed={t === tab}
             onClick={() => {
+              if (t === tab) return;
               setTab(t);
               history.replaceState(
                 null,
@@ -659,6 +655,32 @@ export default function Monitor({ s }: { s: Session }) {
           </button>
         ))}
       </div>
+    </>
+  );
+  if (tab === archiveTab)
+    return (
+      <>
+        {navigation}
+        <NoiseArchive />
+      </>
+    );
+  if (!d.data || d.error)
+    return (
+      <>
+        {navigation}
+        <Wait error={d.error} retry={d.refresh} />
+      </>
+    );
+  const m = d.data,
+    editor = s.rights.includes("edit");
+  const op = (action: string, body: unknown) =>
+    a.run(async () => {
+      await request("monitor/" + action, body);
+      d.refresh();
+    }, "已记录");
+  return (
+    <>
+      {navigation}
       <Notice text={a.notice} />
       <section className="panel">
         {tab === tabs[0] && (
