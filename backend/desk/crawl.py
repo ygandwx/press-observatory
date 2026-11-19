@@ -39,8 +39,17 @@ def validate_profile(profile):
         "subject_terms",
         "documents",
         "publisher",
+        "section",
     }:
         raise ValueError("栏目采集配置无效。")
+    if "section" in profile:
+        from .editorial import AUTHORITY_SECTIONS, MEDIA_SECTIONS
+
+        if not isinstance(profile["section"], str) or profile["section"] not in (
+            *MEDIA_SECTIONS,
+            *AUTHORITY_SECTIONS,
+        ):
+            raise ValueError("栏目未列入已核验范围。")
     if "selector" in profile and "embedded_list_selector" in profile:
         raise ValueError("请选择一种栏目清单结构。")
     for key in (

@@ -3,12 +3,15 @@
 import hashlib
 import json
 from contextlib import contextmanager
+
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
 from rest_framework.exceptions import NotFound
-from .models import FrozenList, Event, Media
-from .domain import event_row, media_row, parse_day, check_state, bounded_int
+
+from .domain import bounded_int, check_state, event_row, media_row, parse_day
+from .labels import text_labels
+from .models import Event, FrozenList, Media
 
 
 @contextmanager
@@ -42,7 +45,16 @@ def load(user, key, scope):
     if scope != "media":
         check_state(user, scope)
     try:
-        return FrozenList.objects.get(pk=key, owner=user, scope=scope)
+        saved = FrozenList.objects.get(pk=key, owner=user, scope=scope)
+        if scope != "media":
+            archived = set(
+                Event.objects.filter(
+                    state="archived", pk__in=[r["id"] for r in saved.rows]
+                ).values_list("pk", flat=True)
+            )
+            if archived:
+                saved.rows = [r for r in saved.rows if r["id"] not in archived]
+        return saved
     except FrozenList.DoesNotExist:
         raise NotFound("该快照不存在或当前账号无权读取。")
 
@@ -86,11 +98,24 @@ def filter_events(rows, f):
             and not row["starred"]
         ):
             continue
+        if f.get("tag") and f["tag"] not in text_labels(row.get("tags")):
+            continue
         media = row["media"]
         if mid and not any(m["id"] == mid for m in media):
             continue
         if any(
-            f.get(k) and not any(m[field] == f[k] for m in media)
+            f.get(k)
+            and f[k]
+            not in (
+                {
+                    (
+                        m.get(field)
+                        or {"region": "未标注", "category": "未分类"}.get(field, "")
+                    )
+                    for m in media
+                }
+                or {"未关联"}
+            )
             for k, field in (
                 ("region", "region"),
                 ("primary", "category"),
@@ -127,7 +152,7 @@ def filter_media(rows, f):
         m
         for m in rows
         if all(not f.get(k) or f[k] == m[k] for k in terms)
-        and (not f.get("tag") or f["tag"] in m.get("tags", []))
+        and (not f.get("tag") or f["tag"] in text_labels(m.get("tags")))
         and (f.get("following") != "1" or m["following"])
         and (query in m["name"].casefold() or query in m["owner"].casefold())
     ]

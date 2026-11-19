@@ -15,14 +15,14 @@ export function Accounts() {
     action = useAction();
   const [name, setName] = useState(""),
     [password, setPassword] = useState(""),
-    [role, setRole] = useState("查看人员");
+    [role, setRole] = useState("社领导");
   if (!data.data || data.error)
     return <Wait error={data.error} retry={data.refresh} />;
   return (
     <>
       <Heading
         title="账号管理"
-        sub="查看人员浏览业务资料，维护人员可管理档案、采集、审核、签发和平台账号。"
+        sub="社领导浏览业务资料，运营编辑可管理档案、采集、审核、签发和平台账号。"
       />
       <form
         className="panel filters"

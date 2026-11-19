@@ -35,16 +35,26 @@ def exception_handler(exc, context):
     return drf_handler(exc, context)
 
 
-def endpoint(methods):
+def endpoint(methods, personal=None):
     def decorate(fn):
         @api_view(methods)
         @wraps(fn)
         def checked(req, *args, **kwargs):
             role = business_role(req.user)
+            personal_write = (
+                personal
+                and req.method == "POST"
+                and kwargs.get("pk") is not None
+                and req.data.get("action") == personal
+                and type(req.data.get("on")) is bool
+                and set(req.data) == {"action", "on"}
+            )
             if not role or (
-                req.method not in ("GET", "HEAD", "OPTIONS") and role != "维护人员"
+                req.method not in ("GET", "HEAD", "OPTIONS")
+                and role != "运营编辑"
+                and not personal_write
             ):
-                raise PermissionDenied("此操作需要维护人员权限。")
+                raise PermissionDenied("此操作需要运营编辑权限。")
             require(req.user, "read")
             return fn(req, *args, **kwargs)
 
@@ -109,8 +119,8 @@ def ready(req):
 
 @endpoint(["GET", "POST"])
 def accounts(req):
-    if business_role(req.user) != "维护人员":
-        raise PermissionDenied("此操作需要维护人员权限。")
+    if business_role(req.user) != "运营编辑":
+        raise PermissionDenied("此操作需要运营编辑权限。")
     User = get_user_model()
     if req.method == "POST":
         username = req.data.get("username")

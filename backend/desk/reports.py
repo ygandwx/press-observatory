@@ -1,13 +1,18 @@
+import hashlib
+import hmac
+import secrets
 from collections import Counter
 from datetime import timedelta
-import secrets
+
 from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from .models import Event, Media, Report, Edition, Change
-from .catalog import CATEGORIES, DIGEST_SECTIONS, DIGEST_BY_SUBCATEGORY, MARKET_SECTIONS
-from .domain import event_row, require, check_version, Conflict
+
+from .catalog import CATEGORIES, DIGEST_BY_SUBCATEGORY, DIGEST_SECTIONS, MARKET_SECTIONS
+from .domain import Conflict, check_version, event_row, require
+from .geo import geo_entry
+from .models import Change, Edition, Event, Media, Report
 
 
 def daily_sections(rows):
@@ -45,14 +50,17 @@ def daily_sections(rows):
     }
 
 
-def build_content(kind, day):
+def build_content(kind, day, *, allow_empty=False):
     start = day if kind == "daily" else day - timedelta(days=day.weekday())
     end = start if kind == "daily" else start + timedelta(days=6)
     if kind == "weekly" and end >= timezone.localdate():
         raise ValidationError("请选择已结束的自然周。")
     selected = (
         Event.objects.filter(
-            state="approved", merged_into=None, approved__date__range=(start, end)
+            state="approved",
+            merged_into=None,
+            is_noise=False,
+            approved__date__range=(start, end),
         )
         .prefetch_related("media", "articles", "merged__media", "merged__articles")
         .order_by("-approved", "pk")
@@ -60,7 +68,7 @@ def build_content(kind, day):
     rows = [event_row(e) for e in selected]
     priority = {"核心": 0, "重点": 1, "常规": 2}
     rows.sort(key=lambda r: priority.get(r["importance"], 3))
-    if kind == "weekly" and not rows:
+    if kind == "weekly" and not rows and not allow_empty:
         raise ValidationError("本周尚无已批准事件。")
     items = [
         {
@@ -135,6 +143,7 @@ def build_content(kind, day):
             Event.objects.filter(
                 state="approved",
                 merged_into=None,
+                is_noise=False,
                 approved__date__range=(previous_start, previous_end),
             )
             .order_by()
@@ -152,6 +161,13 @@ def build_content(kind, day):
                 for k in sorted(set(previous) | set(by_type))
             },
         }
+        report_sections["geo_progress"] = [
+            entry
+            for event in sorted(
+                selected, key=lambda item: priority.get(item.importance, 3)
+            )
+            if (entry := geo_entry(event))
+        ]
     return {
         "start": str(start),
         "end": str(end),
@@ -164,6 +180,7 @@ def build_content(kind, day):
             "本周累计": Event.objects.filter(
                 state="approved",
                 merged_into=None,
+                is_noise=False,
                 approved__date__range=(start - timedelta(days=start.weekday()), end),
             ).count(),
             "在库媒体": Media.objects.count(),
@@ -175,9 +192,13 @@ def build_content(kind, day):
     }
 
 
-@transaction.atomic
 def generate(user, kind, day, regenerate=False, version=None):
     require(user, "edit")
+    return draft_for_period(kind, day, regenerate, version)
+
+
+@transaction.atomic
+def draft_for_period(kind, day, regenerate=False, version=None):
     if kind not in ("daily", "weekly"):
         raise ValidationError("无效报告类型。")
     if kind == "weekly":
@@ -196,6 +217,37 @@ def generate(user, kind, day, regenerate=False, version=None):
 
 
 @transaction.atomic
+def schedule_weekly(today=None):
+    """The latest complete Beijing week is retried on subsequent timer ticks."""
+    today = today or timezone.localdate()
+    start = today - timedelta(days=today.weekday() + 7)
+    if Report.objects.filter(kind="weekly", day=start).exists():
+        return None
+    if not Event.objects.filter(
+        state="approved",
+        is_noise=False,
+        merged_into=None,
+        approved__date__range=(start, start + timedelta(days=6)),
+    ).exists():
+        return None
+    return draft_for_period("weekly", start)
+
+
+def weekly_share_key(report, edition_version, view):
+    payload = f"{report.pk}-{edition_version}-{view}"
+    signature = hmac.new(
+        report.share_token.encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"w-{payload}-{signature}"
+
+
+def weekly_share_views(report, version):
+    return {
+        view: weekly_share_key(report, version, view) for view in ("leader", "detail")
+    }
+
+
+@transaction.atomic
 def report_action(user, pk, action, data):
     r = Report.objects.select_for_update().get(pk=pk)
     right = (
@@ -205,7 +257,23 @@ def report_action(user, pk, action, data):
     )
     require(user, right)
     check_version(r, data.get("version"))
-    if action == "edit" and r.state == "draft":
+    change = {}
+    if action == "rebuild_correction" and r.state == "draft" and r.editions.exists():
+        reason = str(data.get("reason") or "").strip()
+        if not reason or len(reason) > 500:
+            raise ValidationError("请填写 1 至 500 字的更正依据。")
+        previous = r.editions.latest("version")
+        old = {e["id"] for e in previous.content.get("events", [])}
+        r.content = build_content(r.kind, r.day, allow_empty=True)
+        current = {e["id"] for e in r.content["events"]}
+        change = {
+            "previous_edition": previous.version,
+            "reason": reason,
+            "removed": sorted(old - current),
+            "added": sorted(current - old),
+        }
+        r.content["correction"] = change
+    elif action == "edit" and r.state == "draft":
         for key in ("headline", "key_changes", "categories", "special"):
             if key in data:
                 val = data[key]
@@ -266,7 +334,7 @@ def report_action(user, pk, action, data):
     Change.objects.create(
         actor=user.username,
         action=action,
-        detail={"report": r.pk, "version": r.version},
+        detail={"report": r.pk, "version": r.version, **change},
     )
     return r
 
@@ -289,4 +357,11 @@ def report_row(r, detail=False, manage=False):
         )
     if manage:
         result["share"] = r.share_token
+        if (
+            r.kind == "weekly"
+            and r.share_token
+            and r.state in ("published", "archived")
+        ):
+            version = r.editions.latest("version").version
+            result["share_views"] = weekly_share_views(r, version)
     return result

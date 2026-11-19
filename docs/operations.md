@@ -18,14 +18,14 @@ chmod 600 .env
 docker compose config -q
 docker compose up -d --build
 docker compose logs init
-docker compose exec web python manage.py account reader 查看人员
-docker compose exec web python manage.py account editor 维护人员
+docker compose exec web python manage.py account reader 社领导
+docker compose exec web python manage.py account editor 运营编辑
 curl --fail http://127.0.0.1:8080/api/v1/ready
 ```
 
 账号命令交互读取密码；再次运行可调整角色，加 `--password` 更新密码。用浏览器打开上述地址的首页。启用 TLS 反向代理时设置域名对应的 `ALLOWED_HOSTS`、`CSRF_TRUSTED_ORIGINS` 和 `COOKIE_SECURE=1`。生产前限制登录尝试速率、设置数据库备份保留期，并确认采集服务器允许访问目标官方信源。停止服务用 `docker compose stop`。
 
-从五组账号升级时，迁移 0004 保留原账号和密码，阅读账号进入查看人员组，原操作账号进入维护人员组。正式名册的预检、事务导入、回读与回退见[档案迁移说明](archive-directory.md)。
+从五组账号升级时，迁移 0004 保留原账号和密码，阅读账号进入社领导组，原操作账号进入运营编辑组。正式名册的预检、事务导入、回读与回退见[档案迁移说明](archive-directory.md)。
 
 ## 名册、信源与模型
 
@@ -68,7 +68,7 @@ export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsa
 export DEV_SQLITE=1
 python backend/manage.py migrate
 python backend/manage.py bootstrap --public-sources
-python backend/manage.py account local 维护人员
+python backend/manage.py account local 运营编辑
 python backend/manage.py runserver 127.0.0.1:8000
 ```
 
@@ -92,3 +92,18 @@ docker compose exec -T db sh -c 'pg_restore --exit-on-error -U "$POSTGRES_USER" 
 数据库迁移 `0003` 增加账号专属的看板和检索快照、分批检索进度及机构日报归栏字段。备份与恢复包含这些表，容量监测应覆盖历史快照。升级前只带 `as_of` 的书签没有当时的来源及归并关系，打开会提示从看板生成新链接。升级前的签发期次继续使用原存档。
 
 市场化纸媒可在机构档案或 CSV 的 `digest_section` 填写“地方商业报”或“晚报类”，用 `reference` 保存支持该归栏的资料网址。编辑应核对出处内容。资料暂缺时将归栏留空，日报会列出待核事件。
+
+## 历史事件预览、归档与撤回
+
+在受限的私有目录内生成清单。先把数据库备份恢复到独立库，核对角色、机构标识、来源、事件与签发状态，演练整批操作和撤回。清单含原始业务数据，存放在仓库以外。
+
+```sh
+umask 077
+python backend/manage.py archive_event_batch preview /private/review/archive.json
+python backend/manage.py archive_event_batch apply /private/review/archive.json --sha256 "$APPROVED_DIGEST"
+python backend/manage.py archive_event_batch undo /private/review/archive.json --sha256 "$APPROVED_DIGEST"
+```
+
+清单记录每项原状态、版本、原文和影响范围。应用以获批清单为边界，批中任一事件变化，或出现草稿和签发版引用，命令整批中止。归档从实时列表、旧快照的在线展示、检索和后续导出移出这些事件，保留原文、审核依据、归档审计及账户关系。保存在用户设备上的文件仍由各自持有人管理。
+
+仅需按噪音规则清理待审时，使用相同参数调用 `editorial_history`。该命令另列已批准、已引用和有归并关系的记录，仅对可处理项标记过滤。两项命令有独立清单与摘要。结构升级采用向前迁移，在恢复副本先演练回退到旧版迁移号，再重新升级；上线后有新写入时应先作新的完整备份并核对差异。

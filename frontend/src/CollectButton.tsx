@@ -21,6 +21,14 @@ type Batch = {
   finished: number;
   complete: boolean;
   event_count: number;
+  rejections: {
+    url: string;
+    title: string;
+    source__name: string;
+    noise_reason: string;
+    filtered_by: string;
+    terms: string[];
+  }[];
   snapshot: string | null;
 };
 
@@ -82,6 +90,17 @@ function CollectionProgress({
               </div>
             </div>
           ))}
+          {data.rejections?.length > 0 && (
+            <details>
+              <summary>本次排除依据（最多展示 100 条）</summary>
+              {data.rejections.map((r, i) => (
+                <p key={i}>
+                  {r.source__name} · {r.title} · {r.filtered_by}{" "}
+                  {r.noise_reason} · {r.terms.join("、")}
+                </p>
+              ))}
+            </details>
+          )}
           {data.complete &&
             (data.snapshot ? (
               <a

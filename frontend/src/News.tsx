@@ -8,6 +8,7 @@ import {
   Wait,
   Pager,
   Story,
+  tagValues,
   query,
   url,
   useData,
@@ -17,6 +18,26 @@ import {
   api,
 } from "./shared";
 import type { Session, Dict, EventRow, Page } from "./shared";
+const noiseReasons = ["招标采购", "招聘", "广告", "第三方新闻", "其他"];
+function RawSources({ e }: { e: EventRow }) {
+  return (
+    <>
+      {e.articles.map((a) => (
+        <div key={a.id}>
+          <a
+            className={a.status === "可能失效" ? "unavailable-source" : ""}
+            href={a.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {a.title} ↗
+          </a>{" "}
+          · {a.status}
+        </div>
+      ))}
+    </>
+  );
+}
 export function News({
   s,
   pending = false,
@@ -30,7 +51,8 @@ export function News({
     [ai, setAi] = useState(""),
     [progress, setProgress] = useState(""),
     [selected, setSelected] = useState<number[]>([]),
-    [reason, setReason] = useState("");
+    [reason, setReason] = useState(""),
+    [noise, setNoise] = useState("");
   const [active, setActive] = useState<Dict>(
       pending ? { state: "pending" } : { ...query },
     ),
@@ -59,7 +81,12 @@ export function News({
     const items = d.data?.items
       .filter((e) => selected.includes(e.id))
       .map((e) => ({ id: e.id, version: e.version }));
-    await request("events/review", { items, reason, action });
+    await request("events/review", {
+      items,
+      reason,
+      action,
+      noise_reason: action === "reject" ? noise : "",
+    });
     setSelected([]);
     d.refresh();
   }
@@ -73,19 +100,22 @@ export function News({
             : "按机构、事件类别与日期追踪行业变化"
         }
       >
-        <a
-          className="button"
-          href={
-            api +
-            url("events", {
-              ...active,
-              export: "csv",
-              ...(selected.length ? { ids: selected.join(",") } : {}),
-            })
-          }
-        >
-          导出 CSV
-        </a>
+        {(["csv", "excel"] as const).map((kind) => (
+          <a
+            className="button"
+            key={kind}
+            href={
+              api +
+              url("events", {
+                ...active,
+                export: kind,
+                ...(selected.length ? { ids: selected.join(",") } : {}),
+              })
+            }
+          >
+            {kind === "csv" ? "导出 CSV" : "导出 Excel"}
+          </a>
+        ))}
       </Heading>
       {s.rights.includes("edit") && (
         <form
@@ -158,6 +188,11 @@ export function News({
           />
         ))}
         <Field
+          label="趋势标签"
+          value={f.tag || ""}
+          onChange={(v) => change("tag", v)}
+        />
+        <Field
           label="地区"
           value={f.region || ""}
           onChange={(v) => change("region", v)}
@@ -225,7 +260,8 @@ export function News({
         <section className="panel">
           <div className="section-title">
             <h2>
-              {states[active.state || "approved"]}动态 · {d.data.count}
+              {states[active.state || "approved"] || "未知状态"}动态 ·{" "}
+              {d.data.count}
             </h2>
             {!!d.data.items.length && (
               <label className="check">
@@ -247,6 +283,12 @@ export function News({
             !active.result &&
             active.state === "pending" && (
               <div className="actions">
+                <Select
+                  label="回标噪音类型"
+                  value={noise}
+                  options={noiseReasons}
+                  onChange={setNoise}
+                />
                 <input
                   aria-label="退回原因"
                   placeholder="退回原因"
@@ -281,7 +323,42 @@ export function News({
                   )
                 }
               />
-              <Story e={e} />
+              <div>
+                <Story e={e} />
+                {pending && (
+                  <details>
+                    <summary>展开待审原文与修改</summary>
+                    <RawSources e={e} />
+                    <form
+                      aria-label={"编辑待审 " + e.title}
+                      onSubmit={(ev) => {
+                        ev.preventDefault();
+                        const values = Object.fromEntries(
+                          new FormData(ev.currentTarget),
+                        );
+                        void a.run(async () => {
+                          await request("events/" + e.id, {
+                            ...values,
+                            action: "edit",
+                            version: e.version,
+                          });
+                          d.refresh();
+                        });
+                      }}
+                    >
+                      <label>
+                        待审标题
+                        <input name="title" defaultValue={e.title} required />
+                      </label>
+                      <label>
+                        待审摘要
+                        <textarea name="summary" defaultValue={e.summary} />
+                      </label>
+                      <button disabled={a.busy}>保存本条修改</button>
+                    </form>
+                  </details>
+                )}
+              </div>
             </div>
           ))}
           {!d.data.count && <Empty>没有符合条件的动态</Empty>}
@@ -298,7 +375,8 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
   const d = useData<EventRow>("events/" + id),
     a = useAction(),
     [target, setTarget] = useState(""),
-    [reason, setReason] = useState("");
+    [reason, setReason] = useState(""),
+    [noise, setNoise] = useState("");
   if (!d.data || d.error) return <Wait error={d.error} retry={d.refresh} />;
   const e = d.data;
   const act = (body: unknown, path = "events/" + id) =>
@@ -315,12 +393,12 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
           e.category,
           e.subtype,
           e.occurred || "日期待核验",
-          states[e.state],
+          states[e.state] || "未知状态",
         ]
           .filter(Boolean)
           .join(" · ")}
       >
-        {s.rights.includes("edit") && (
+        {s.rights.includes("read") && (
           <button onClick={() => act({ action: "star", on: !e.starred })}>
             {e.starred ? "取消收藏" : "☆ 收藏"}
           </button>
@@ -339,7 +417,15 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
                 const values = Object.fromEntries(
                   new FormData(x.currentTarget),
                 );
-                act({ ...values, action: "edit", version: e.version });
+                act({
+                  ...values,
+                  tags: String(values.tags || "")
+                    .split(/[，,、]/)
+                    .map((x) => x.trim())
+                    .filter(Boolean),
+                  action: "edit",
+                  version: e.version,
+                });
               }}
             >
               <label>
@@ -385,6 +471,13 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
                   ))}
                 </select>
               </label>
+              <label>
+                趋势标签（用逗号分隔）
+                <input
+                  name="tags"
+                  defaultValue={tagValues(e.tags).join("，")}
+                />
+              </label>
               <label className="wide">
                 摘要
                 <textarea name="summary" defaultValue={e.summary} />
@@ -395,6 +488,9 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
         )}
       <section className="panel">
         <h2>动态摘要</h2>
+        <p>
+          {[e.importance, ...tagValues(e.tags)].filter(Boolean).join(" · ")}
+        </p>
         <p>{e.summary || "待编辑补充"}</p>
         <h3>关联媒体档案</h3>
         <div className="actions">
@@ -407,10 +503,48 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
         <h3>原文与来源状态</h3>
         {e.articles.map((x) => (
           <div className="row" key={x.id}>
-            <a href={x.url} target="_blank" rel="noreferrer">
+            <a
+              className={x.status === "可能失效" ? "unavailable-source" : ""}
+              href={x.url}
+              target="_blank"
+              rel="noreferrer"
+            >
               {x.title} ↗
             </a>
             <span className="tag">{x.status}</span>
+            <small>
+              来源日期 {x.published || "待核"} · 核验时间{" "}
+              {x.checked ? new Date(x.checked).toLocaleString("zh-CN") : "待核"}
+            </small>
+            {s.rights.includes("edit") &&
+              ["pending", "rejected"].includes(e.state) && (
+                <details>
+                  <summary>更正原文链接</summary>
+                  <form
+                    onSubmit={(ev) => {
+                      ev.preventDefault();
+                      const field = new FormData(ev.currentTarget).get("url");
+                      void act({
+                        action: "correct_source",
+                        url: field,
+                        article: x.id,
+                        version: e.version,
+                      });
+                    }}
+                  >
+                    <label>
+                      更正后的原文地址
+                      <input
+                        required
+                        type="url"
+                        name="url"
+                        defaultValue={x.url}
+                      />
+                    </label>
+                    <button disabled={a.busy}>保存原文地址</button>
+                  </form>
+                </details>
+              )}
             {s.rights.includes("review") && (
               <button
                 disabled={a.busy}
@@ -422,8 +556,27 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
           </div>
         ))}
         <small>
-          录入人 {e.creator} · {e.created?.slice(0, 10)}
+          录入人 {e.creator || "未记录"} ·{" "}
+          {e.created ? new Date(e.created).toLocaleString("zh-CN") : "时间待核"}{" "}
+          · 录入方式 {e.capture_method || "历史记录未注明"}
+          <br />
+          审核人 {e.reviewer || "未记录"} ·{" "}
+          {e.reviewed_at
+            ? new Date(e.reviewed_at).toLocaleString("zh-CN")
+            : "审核时间待核"}
         </small>
+      </section>
+      <section className="panel">
+        <h2>关联动态</h2>
+        {e.related?.length ? (
+          e.related.map((r) => (
+            <p key={r.id}>
+              <a href={"/news/" + r.id}>{r.title} ↗</a> · {r.category}
+            </p>
+          ))
+        ) : (
+          <Empty>暂无同类或同机构动态</Empty>
+        )}
       </section>
       {e.reasoning && (
         <section className="panel">
@@ -471,12 +624,18 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
                 </button>
               ))}
             </div>
-          ) : (
+          ) : ["pending", "rejected"].includes(e.state) ? (
             <div className="actions">
               <input
                 placeholder="退回原因"
                 value={reason}
                 onChange={(x) => setReason(x.target.value)}
+              />
+              <Select
+                label="退回时回标噪音"
+                value={noise}
+                options={noiseReasons}
+                onChange={setNoise}
               />
               {["approve", "reject"].map((action) => (
                 <button
@@ -487,6 +646,7 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
                       {
                         action,
                         reason,
+                        noise_reason: action === "reject" ? noise : "",
                         items: [{ id: e.id, version: e.version }],
                       },
                       "events/review",
@@ -497,6 +657,52 @@ export function EventDetail({ s, id }: { s: Session; id: string }) {
                 </button>
               ))}
             </div>
+          ) : null}
+          {(e.can_recheck ||
+            ((e.state === "rejected" || e.state === "filtered") &&
+              e.is_noise)) && (
+            <details>
+              <summary>人工复核与回标</summary>
+              <label>
+                复核理由
+                <input
+                  value={reason}
+                  onChange={(x) => setReason(x.target.value)}
+                />
+              </label>
+              <Select
+                label="噪音类型"
+                value={noise}
+                options={noiseReasons}
+                onChange={setNoise}
+              />
+              {(e.state === "approved"
+                ? [
+                    ["confirm", "确认自动批准"],
+                    ["pending", "转回待审"],
+                    ["noise", "标记噪音"],
+                  ]
+                : [["restore", "恢复为待审"]]
+              ).map(([k, v]) => (
+                <button
+                  key={k}
+                  disabled={
+                    a.busy || !reason.trim() || (k === "noise" && !noise)
+                  }
+                  onClick={() =>
+                    act({
+                      action: "feedback",
+                      decision: k,
+                      noise_reason: noise,
+                      reason,
+                      version: e.version,
+                    })
+                  }
+                >
+                  {v}
+                </button>
+              ))}
+            </details>
           )}
           <h3>操作记录</h3>
           {e.history?.map((h, i) => (

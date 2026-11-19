@@ -13,9 +13,9 @@ from django.utils import timezone
 
 from desk import procurement
 from desk.collection import COUNTERS, source_signature
-from desk.domain import record
+from desk.editorial import assess
 from desk.external import ExternalError
-from desk.models import Article, Change, Run, Source
+from desk.models import IntakeDecision, Run, Source
 
 
 def read_page(directory, entry):
@@ -44,7 +44,7 @@ def read_page(directory, entry):
 
 
 class Command(BaseCommand):
-    help = "离线核验已留存的采购公告，以待审状态登记。默认预检。"
+    help = "离线核验已留存的采购公告，登记过滤依据。默认预检。"
 
     def add_arguments(self, parser):
         parser.add_argument("index", type=Path)
@@ -69,7 +69,7 @@ class Command(BaseCommand):
                 stamp = hashlib.sha256(
                     json.dumps([signature, page], sort_keys=True).encode()
                 ).hexdigest()
-                key = "snapshot:" + stamp
+                key = "snapshot:editorial:" + stamp
                 raw = read_page(index.parent, page)
                 # No network calls. Inspect the captured first page, including rows
                 # beyond the online adapter's per-run article limit.
@@ -93,21 +93,9 @@ class Command(BaseCommand):
                     continue
                 counts = dict.fromkeys(COUNTERS, 0)
                 counts.update({"发现": len(docs), "命中": len(checked)})
-                for url, title, day in checked:
-                    if Article.objects.filter(url=url, events__isnull=False).exists():
-                        counts["重复"] += 1
-                        continue
-                    event, created = record(
-                        {"title": title, "url": url, "published": day},
-                        "采购留存页面核验",
-                        source,
-                        verified=True,
-                    )
-                    if created and (event.state != "pending" or event.auto):
-                        raise ValueError("留存公告仅可进入待审。")
-                    counts["待审" if created else "重复"] += 1
+                counts["过滤"] = len(checked)
                 now = timezone.now()
-                Run.objects.create(
+                job = Run.objects.create(
                     key=key,
                     source=source,
                     trigger="留存页面核验",
@@ -121,14 +109,22 @@ class Command(BaseCommand):
                     message="已离线复核清单和公告原文，各页原始采集时间见证据。",
                     crawl_evidence={"snapshot": page, "query": audit["query"]},
                 )
-                new += counts["待审"]
-                repeated += counts["重复"]
-            if new:
-                Change.objects.create(
-                    actor="采购留存页面核验",
-                    action="留存公告待审",
-                    detail={"new": new, "queries": len(seen)},
-                )
+                for url, title, day in checked:
+                    screening = assess(title, url=url)
+                    IntakeDecision.objects.create(
+                        run=job,
+                        source=source,
+                        url=url,
+                        title=title,
+                        outcome="filtered",
+                        noise_reason="招标采购",
+                        filtered_by="信源黑名单",
+                        terms=screening["terms"],
+                        source_zone=source.zone,
+                        actor="留存页面核验",
+                        analysis={"published": day},
+                    )
+                new += len(checked)
             if not apply:
                 transaction.set_rollback(True)
         except (
@@ -141,6 +137,6 @@ class Command(BaseCommand):
         ) as exc:
             raise CommandError(str(exc))
         self.stdout.write(
-            f"{'已导入' if apply else '预检'} {len(seen)} 个查询，新增待审 {new}，"
+            f"{'已导入' if apply else '预检'} {len(seen)} 个查询，记录过滤 {new}，新增待审 0，"
             f"重复 {repeated}，相同凭据此前已核验 {prior} 篇"
         )

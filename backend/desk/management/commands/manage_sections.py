@@ -8,6 +8,7 @@ from django.db import transaction
 from desk.collection import enqueue, verified_for_schedule
 from desk.crawl import validate_profile
 from desk.external import normalize_url
+from desk.editorial import source_block
 from desk.models import Change, Media, Source
 
 
@@ -57,6 +58,13 @@ class Command(BaseCommand):
                 direct = (
                     Media.objects.get(name=row["media"]) if row.get("media") else None
                 )
+                zone = row.get("zone", "媒体官网" if direct else "")
+                candidate = Source(
+                    name=name, url=url, zone=zone, profile=profile, adapter="html"
+                )
+                blocked = source_block(candidate)
+                if blocked and (trial_key or schedule or (apply and not paused)):
+                    raise ValueError(f"{name} 尚未获准采集：{blocked}")
                 covered = list(Media.objects.filter(name__in=row.get("covered", [])))
                 if len(covered) != len(set(row.get("covered", []))):
                     raise ValueError(f"{name} 的覆盖机构不完整")
@@ -79,6 +87,8 @@ class Command(BaseCommand):
                     source = Source.objects.create(
                         url=url,
                         name=name,
+                        zone=zone,
+                        stop_reason=blocked if blocked else "",
                         profile=profile,
                         media=direct,
                         adapter="html",
@@ -94,7 +104,7 @@ class Command(BaseCommand):
                     )
                 if source and trial_key:
                     if not source.enabled:
-                        raise ValueError(f"{name} 已由维护人员停用")
+                        raise ValueError(f"{name} 已由运营编辑停用")
                     self.stdout.write(
                         f"{name} 任务 {enqueue('栏目实测', 'section:' + trial_key, [source.pk])}"
                     )

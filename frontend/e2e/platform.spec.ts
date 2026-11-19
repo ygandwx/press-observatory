@@ -25,7 +25,7 @@ async function autoPolicy(p: Page) {
   await login(p, "配置");
   await p.goto("/monitor?tab=自动入库设置");
   await p.getByLabel("启用 AI 自动入库").check();
-  await p.getByLabel("放行门槛").selectOption("85");
+  await p.getByLabel("放行门槛").fill("85");
   await button(p, "保存设置").click();
   await expect(p.getByText("已保存", { exact: true })).toBeVisible();
 }
@@ -121,7 +121,8 @@ test("B02 · 看板下钻、筛选返回、收藏、分页、完整 CSV 与模�
   expect(csv.toString("utf8").trim().split(/\r?\n/)).toHaveLength(27);
   await link(page, "合成分页事件 25").click();
   const eventURL = page.url();
-  await expect(button(page, "☆ 收藏")).toHaveCount(0);
+  await button(page, "☆ 收藏").click();
+  await expect(button(page, "取消收藏")).toBeVisible();
   await login(page, "编辑");
   await page.goto(eventURL);
   await button(page, "☆ 收藏").click();
@@ -169,7 +170,8 @@ test("B03 · 名册预检后的对比、关注、五件套补全与取消", asyn
   await page.goto(url + "?edit=1");
   await expect(heading(page, "平台矩阵")).toBeVisible();
   await expect(button(page, "保存档案")).toHaveCount(0);
-  await expect(button(page, "关注机构")).toHaveCount(0);
+  await button(page, "关注机构").click();
+  await expect(button(page, "取消关注")).toBeVisible();
   await login(page, "编辑");
   await page.goto(url);
   await button(page, "关注机构").click();
@@ -216,6 +218,8 @@ test("B04 · 信源与关键词启停、取消编辑、阈值和只读配置", a
   await login(page, "配置");
   await page.goto("/monitor?tab=信源配置");
   await page.getByLabel("信源名称").fill("合成暂停源");
+  await page.getByLabel("信源类型").selectOption("媒体官网");
+  await page.getByLabel("已核实栏目").selectOption("社内动态");
   await page.getByLabel("来源网址").fill("https://acceptance.invalid/disabled");
   await page.getByLabel("启用", { exact: true }).uncheck();
   await button(page, "添加").click();
@@ -246,7 +250,7 @@ test("B04 · 信源与关键词启停、取消编辑、阈值和只读配置", a
   await page.reload();
   await expect(row).toContainText("暂停");
   await tab(page, "自动入库设置");
-  await page.getByLabel("放行门槛").selectOption("70");
+  await page.getByLabel("放行门槛").fill("70");
   await page.getByLabel("低于此分过滤").fill("71");
   await button(page, "保存设置").click();
   await expect(page.getByText(/数值须在/)).toBeVisible();
@@ -270,7 +274,14 @@ test("B05 · 真实 worker 消费、去重、巡检重试与记录结论", async
   await button(page, "一键采集入库").click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText(/采集已结束/)).toBeVisible({ timeout: 20000 });
-  await expect(dialog.getByText(/需授权数据源或人工巡检/)).toBeVisible();
+  await expect(
+    dialog.locator(".row").getByText(/需授权数据源或人工巡检/),
+  ).toBeVisible();
+  await dialog.getByText(/本次排除依据/).click();
+  await expect(
+    dialog.getByText(/合成报社智能采编系统公开招标公告/),
+  ).toBeVisible();
+  await expect(dialog.getByText(/合成报社招聘采编主管/)).toBeVisible();
   await evidence(page, info, "collection");
   await link(page, /查看本次新入库动态 · 1 件/).click();
   await expect(link(page, "合成日报上线移动采编工具")).toBeVisible();
@@ -476,14 +487,14 @@ test("B09 · 两种账号、平台账号管理和档案分组", async ({ page })
   await button(page, "创建账号").click();
   await expect(page.getByText("账号已创建", { exact: true })).toBeVisible();
   const role = page.getByLabel("名册查看用户 的账号类型");
-  await expect(role).toHaveValue("查看人员");
-  await role.selectOption("维护人员");
+  await expect(role).toHaveValue("社领导");
+  await role.selectOption("运营编辑");
   await role
     .locator("xpath=../..")
     .getByRole("button", { name: "保存角色" })
     .click();
   await page.reload();
-  await expect(role).toHaveValue("维护人员");
+  await expect(role).toHaveValue("运营编辑");
   await page.goto("/archives");
   await page.getByRole("tab", { name: "分类看板" }).click();
   await expect(page.locator(".board-row").first()).toBeVisible();

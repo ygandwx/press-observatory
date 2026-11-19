@@ -7,12 +7,14 @@ import {
   Field,
   Select,
   Story,
+  tagValues,
   url,
   query,
   request,
   useAction,
   useData,
 } from "./shared";
+import { MetricTable, MetricEditor } from "./MediaMetrics";
 import type { Session, Media, Page, Dict } from "./shared";
 function MediaForm({
   s,
@@ -45,7 +47,7 @@ function MediaForm({
       ),
     ),
     [priority, setPriority] = useState(initial?.high_priority || false),
-    [tags, setTags] = useState(initial?.tags.join("、") || ""),
+    [tags, setTags] = useState(tagValues(initial?.tags).join("、")),
     [channels, setChannels] = useState<Dict>({ ...initial?.channels }),
     a = useAction();
   const setter = (k: string, v: string) =>
@@ -153,18 +155,19 @@ function missing(m: Media) {
   ).length;
 }
 function Category({ name }: { name: string }) {
+  const value = typeof name === "string" ? name : "";
   return (
     <span
       className={
         "chip " +
-        (name.startsWith("中央")
+        (value.startsWith("中央")
           ? "central"
-          : name.startsWith("头部")
+          : value.startsWith("头部")
             ? "market"
             : "")
       }
     >
-      {name || "—"}
+      {value || "—"}
     </span>
   );
 }
@@ -173,7 +176,10 @@ export function Archives({ s }: { s: Session }) {
   const [active, setActive] = useState<Dict>({ ...query }),
     [f, set] = useState<Dict>({ ...query }),
     [add, setAdd] = useState(false);
-  const [compare, setCompare] = useState<number[]>([]),
+  const [compare, setCompare] = useState<
+      Pick<Media, "id" | "category" | "subcategory">[]
+    >([]),
+    [comparisonDay, setComparisonDay] = useState(""),
     [show, setShow] = useState(false);
   const tab = active.tab || "list",
     maintain = s.rights.includes("edit");
@@ -194,9 +200,17 @@ export function Archives({ s }: { s: Session }) {
   };
   const change = (k: string, v: string) =>
     set({ ...f, [k]: v, ...(k === "category" ? { subcategory: "" } : {}) });
-  const toggle = (id: number) => {
+  const selected = (id: number) => compare.some((m) => m.id === id);
+  const canCompare = (m: Media) =>
+    selected(m.id) ||
+    !compare.length ||
+    (compare.length < 3 &&
+      !!m.category &&
+      m.category === compare[0].category &&
+      m.subcategory === compare[0].subcategory);
+  const toggle = (m: Media) => {
     setCompare(
-      compare.includes(id) ? compare.filter((n) => n !== id) : [...compare, id],
+      selected(m.id) ? compare.filter((n) => n.id !== m.id) : [...compare, m],
     );
     setShow(false);
   };
@@ -286,7 +300,7 @@ export function Archives({ s }: { s: Session }) {
           value={f.kind || ""}
           onChange={(v) => change("kind", v)}
         />
-        {maintain && (
+        {s.rights.includes("read") && (
           <label className="check">
             <input
               type="checkbox"
@@ -380,8 +394,16 @@ export function Archives({ s }: { s: Session }) {
           </div>
           {show && (
             <div className="comparison">
-              {compare.map((id) => (
-                <Compare key={id} id={id} />
+              <label className="comparison-period">
+                统一统计期末（可选）
+                <input
+                  type="date"
+                  value={comparisonDay}
+                  onChange={(e) => setComparisonDay(e.target.value)}
+                />
+              </label>
+              {compare.map(({ id }) => (
+                <Compare key={id} id={id} period={comparisonDay} />
               ))}
             </div>
           )}
@@ -396,7 +418,7 @@ export function Archives({ s }: { s: Session }) {
                   <p>{m.owner}</p>
                   <Category name={m.category} />
                   <p>
-                    {[m.subcategory, m.level, m.region, ...m.tags]
+                    {[m.subcategory, m.level, m.region, ...tagValues(m.tags)]
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
@@ -431,7 +453,7 @@ export function Archives({ s }: { s: Session }) {
                           {m.subcategory || "—"}
                         </span>
                       </td>
-                      <td>{m.tags.join("、") || "—"}</td>
+                      <td>{tagValues(m.tags).join("、") || "—"}</td>
                       <td>{m.level || "—"}</td>
                       <td>{m.region || "—"}</td>
                       <td>{m.focus || "—"}</td>
@@ -441,8 +463,14 @@ export function Archives({ s }: { s: Session }) {
                           <input
                             type="checkbox"
                             aria-label={"对比 " + m.name}
-                            checked={compare.includes(m.id)}
-                            onChange={() => toggle(m.id)}
+                            checked={selected(m.id)}
+                            disabled={!canCompare(m)}
+                            title={
+                              canCompare(m)
+                                ? "可选择最多三家同类机构"
+                                : "仅可选择同一类别的最多三家机构"
+                            }
+                            onChange={() => toggle(m)}
                           />
                           对比
                         </label>{" "}
@@ -473,7 +501,7 @@ export function Archives({ s }: { s: Session }) {
   );
 }
 
-function Compare({ id }: { id: number }) {
+function Compare({ id, period }: { id: number; period: string }) {
   const d = useData<Media>("media/" + id);
   if (!d.data || d.error) return <Wait error={d.error} retry={d.refresh} />;
   const m = d.data;
@@ -488,8 +516,9 @@ function Compare({ id }: { id: number }) {
         {m.focus} · {m.count} 件事件
       </p>
       <small>
-        已补渠道 {Object.values(m.channels).filter(Boolean).length} / 5
+        已补渠道 {Object.values(m.channels || {}).filter(Boolean).length} / 5
       </small>
+      <MetricTable media={m} period={period} />
     </div>
   );
 }
@@ -517,8 +546,16 @@ function Verification({ m }: { m: Media }) {
         <details>
           <summary>集团共享、历史及其他关联渠道</summary>
           {row.related_channels.map((c, i) => (
-            <p key={i}><b>{c.field} · {c.name}</b>　{c.relationship}{c.entity && `（${c.entity}）`}。{c.note}{" "}
-              <a href={c.url} target="_blank" rel="noreferrer">关系出处 ↗</a></p>
+            <p key={i}>
+              <b>
+                {c.field} · {c.name}
+              </b>
+              　{c.relationship}
+              {c.entity && `（${c.entity}）`}。{c.note}{" "}
+              <a href={c.url} target="_blank" rel="noreferrer">
+                关系出处 ↗
+              </a>
+            </p>
           ))}
         </details>
       )}
@@ -526,9 +563,13 @@ function Verification({ m }: { m: Media }) {
         <details>
           <summary>前次记录与本次修订</summary>
           {row.review_history.map((f, i) => (
-            <p key={i}><b>{f.field}</b>　{f.value}　{f.basis}{" "}
+            <p key={i}>
+              <b>{f.field}</b>　{f.value}　{f.basis}{" "}
               {f.reason && <span>本次修订依据　{f.reason} </span>}
-              <a href={f.url} target="_blank" rel="noreferrer">前次出处 ↗</a></p>
+              <a href={f.url} target="_blank" rel="noreferrer">
+                前次出处 ↗
+              </a>
+            </p>
           ))}
         </details>
       )}
@@ -579,6 +620,8 @@ export function Archive({ s, id }: { s: Session; id: string }) {
   const data = useData<Media>("media/" + id),
     canEdit = s.rights.includes("edit"),
     [edit, setEdit] = useState(canEdit && query.edit === "1"),
+    [peerView, setPeerView] = useState(false),
+    [peerDay, setPeerDay] = useState(""),
     a = useAction();
   if (!data.data || data.error)
     return <Wait error={data.error} retry={data.refresh} />;
@@ -594,7 +637,7 @@ export function Archive({ s, id }: { s: Session; id: string }) {
           媒体档案详情
         </h1>
         <div className="actions">
-          {canEdit && (
+          {s.rights.includes("read") && (
             <>
               <button
                 disabled={a.busy}
@@ -610,9 +653,11 @@ export function Archive({ s, id }: { s: Session; id: string }) {
               >
                 {m.following ? "取消关注" : "关注机构"}
               </button>
-              <button className="primary" onClick={() => setEdit(!edit)}>
-                编辑与补全
-              </button>
+              {canEdit && (
+                <button className="primary" onClick={() => setEdit(!edit)}>
+                  编辑与补全
+                </button>
+              )}
             </>
           )}
         </div>
@@ -653,7 +698,7 @@ export function Archive({ s, id }: { s: Session; id: string }) {
                   </span>
                 ))}
             </div>
-            <p>垂直领域　{m.tags.join("、") || "—"}</p>
+            <p>垂直领域　{tagValues(m.tags).join("、") || "—"}</p>
             <p>地区　{m.region || "—"}</p>
             {m.description && <p>{m.description}</p>}
             {m.high_priority && <strong>高优先级</strong>}
@@ -681,6 +726,31 @@ export function Archive({ s, id }: { s: Session; id: string }) {
                 )}
               </div>
             ))}
+          </section>
+          <section className="panel">
+            <MetricTable media={m} />
+            {canEdit && <MetricEditor media={m} refresh={data.refresh} />}
+            <button
+              onClick={() => setPeerView((v) => !v)}
+              disabled={!m.peers?.length}
+            >
+              {peerView ? "收起同类对比" : "与同类机构对比"}
+            </button>
+            {peerView && (
+              <div className="comparison">
+                <label className="comparison-period">
+                  共同统计期末
+                  <input
+                    type="date"
+                    value={peerDay}
+                    onChange={(ev) => setPeerDay(ev.target.value)}
+                  />
+                </label>
+                {[m, ...(m.peers || [])].map((item) => (
+                  <Compare key={item.id} id={item.id} period={peerDay} />
+                ))}
+              </div>
+            )}
           </section>
           <Verification m={m} />
           <section className="panel">

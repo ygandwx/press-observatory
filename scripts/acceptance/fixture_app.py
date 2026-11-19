@@ -36,7 +36,10 @@ def fixture_fetch(url, redirects=3):
     if parts.hostname != "acceptance.invalid":
         raise external.ExternalError("隔离验收只读取合成来源。")
     if parts.path == "/feed":
-        html = f'<a href="/auto">{AUTO_TITLE}</a>'
+        html = (
+            f'<a href="/tender-note">合成报社智能采编系统公开招标公告</a><a href="/staff-note">合成报社招聘采编主管</a>'
+            f'<a href="/auto">{AUTO_TITLE}</a>'
+        )
     elif parts.path in ("/auto", "/entry"):
         title = AUTO_TITLE if parts.path == "/auto" else "合成晚报改版手记"
         html = f"<article><h1>{title}</h1><p>隔离验收专用的合成资料。该机构正式试行新的编辑流程并调整纸质版面。</p></article>"
@@ -52,9 +55,7 @@ def seed():
         u = User.objects.create_user(
             "验收" + role, password=os.environ["ACCEPTANCE_PASSWORD"]
         )
-        u.groups.add(
-            Group.objects.get(name="查看人员" if role == "阅读" else "维护人员")
-        )
+        u.groups.add(Group.objects.get(name="社领导" if role == "阅读" else "运营编辑"))
     with tempfile.TemporaryDirectory() as folder:
         csv_path = Path(folder) / "synthetic.csv"
         with csv_path.open("w", encoding="utf-8", newline="") as f:
@@ -99,7 +100,12 @@ def seed():
     }
     paper.save(update_fields=["verification"])
     Source.objects.create(
-        name="合成官网", media=paper, url=ORIGIN + "/feed", trusted=True
+        name="合成官网",
+        media=paper,
+        url=ORIGIN + "/feed",
+        trusted=True,
+        zone="媒体官网",
+        profile={"section": "产品与平台"},
     )
     Source.objects.create(
         name="合成人工渠道", media=paper, url=ORIGIN + "/manual", adapter="人工"
@@ -132,7 +138,10 @@ def seed():
     week_event.media.add(paper)
     week_event.articles.add(
         Article.objects.create(
-            title=week_event.title, url=ORIGIN + "/week", status="已核验"
+            title=week_event.title,
+            url=ORIGIN + "/week",
+            status="已核验",
+            excerpt="合成周报样本：该报社发布生成式引擎优化研究，测量 AI 可见度。",
         )
     )
     for title in ("合成待审一", "合成待审二"):

@@ -3,7 +3,9 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError, PermissionDenied, APIException
-from .models import Event, Article, Change, Media
+from .labels import text_labels
+from .models import Event, Article, Change, Media, IntakeDecision
+from . import editorial
 from .catalog import EVENTS, IMPORTANCE
 from .external import normalize_url
 
@@ -67,6 +69,12 @@ def query_events(user, filters):
         "focus": "media__focus",
     }.items():
         if filters.get(key):
+            if key in ("region", "primary") and filters[key] == "未关联":
+                qs = qs.exclude(Q(media__isnull=False) | Q(merged__media__isnull=False))
+                continue
+            if (key, filters[key]) in (("region", "未标注"), ("primary", "未分类")):
+                qs = qs.filter(Q(**{field: ""}) | Q(**{"merged__" + field: ""}))
+                continue
             qs = (
                 qs.filter(
                     Q(**{field: filters[key]}) | Q(**{"merged__" + field: filters[key]})
@@ -77,6 +85,8 @@ def query_events(user, filters):
     if filters.get("media"):
         mid = bounded_int(filters["media"], 1, 2**53)
         qs = qs.filter(Q(media=mid) | Q(merged__media=mid))
+    if filters.get("tag"):
+        qs = qs.filter(tags__contains=[str(filters["tag"])[:100]])
     if filters.get("auto") == "1":
         qs = qs.filter(auto=True)
     if filters.get("star") == "1":
@@ -139,7 +149,16 @@ def event_row(e, user=None):
         "approval_day": str(timezone.localdate(e.approved)) if e.approved else None,
         "state": e.state,
         "auto": e.auto,
-        "tags": e.tags,
+        "tags": text_labels(e.tags),
+        "subject_type": e.subject_type,
+        "event_nature": e.event_nature,
+        "is_noise": e.is_noise,
+        "noise_reason": e.noise_reason,
+        "filtered_by": e.filtered_by,
+        "relevance_score": e.score,
+        "ai_reasoning": e.reasoning,
+        "source_zone": e.source_zone,
+        "capture_method": e.capture_method,
         "reasoning": e.reasoning,
         "score": e.score,
         "version": e.version,
@@ -156,6 +175,7 @@ def event_row(e, user=None):
                 "category": m.category,
                 "subcategory": m.subcategory,
                 "focus": m.focus,
+                "high_priority": m.high_priority,
                 "digest_section": m.digest_section,
                 "reference": m.reference,
             }
@@ -204,7 +224,23 @@ def record(data, actor, source=None, verified=False):
     existing = article.events.first()
     if existing:
         return existing, False
+    screening = editorial.assess(title, str(data.get("summary", "")), url)
+    if screening["gate"] == "参评非获奖结果":
+        screening["reason"] = "其他"
+    method = (
+        "自动采集"
+        if source
+        else (
+            "AI 辅助录入" if data.get("capture_method") == "AI 辅助录入" else "人工录入"
+        )
+    )
     event = Event.objects.create(
+        state="filtered" if screening["reason"] else "pending",
+        is_noise=bool(screening["reason"]),
+        noise_reason=screening["reason"],
+        filtered_by=screening["gate"] if screening["reason"] else "",
+        capture_method=method,
+        source_zone=source.zone if source else "",
         title=title,
         category=cat,
         subtype=sub,
@@ -224,11 +260,22 @@ def record(data, actor, source=None, verified=False):
             raise ValidationError("机构不存在。")
         event.media.add(media_obj)
     Change.objects.create(event=event, actor=actor, action="录入")
+    if source is None:
+        IntakeDecision.objects.create(
+            event=event,
+            title=title,
+            url=url,
+            outcome=event.state,
+            filtered_by=event.filtered_by,
+            noise_reason=event.noise_reason,
+            terms=screening["terms"],
+            actor=actor,
+        )
     return event, True
 
 
 @transaction.atomic
-def review(user, items, action, reason=""):
+def review(user, items, action, reason="", noise_reason=""):
     require(user, "review")
     if action not in ("approve", "reject") or (
         action == "reject" and not reason.strip()
@@ -244,10 +291,47 @@ def review(user, items, action, reason=""):
     for item in sorted(items, key=lambda i: i["id"]):
         e = Event.objects.select_for_update().get(pk=item["id"])
         check_version(e, item.get("version"))
-        if e.merged_into_id or e.state not in ("pending", "rejected"):
+        can_recall = (
+            action == "reject"
+            and e.state == "approved"
+            and e.auto
+            and not e.changes.filter(action="approve").exists()
+        )
+        if e.merged_into_id or (
+            e.state not in ("pending", "rejected") and not can_recall
+        ):
             raise Conflict()
         if action == "approve" and not e.articles.filter(status="已核验").exists():
             raise ValidationError("请先核验至少一个可访问的真实原文。")
+        if action == "approve" and any(
+            editorial.assess(a.title, a.excerpt, a.url)["gate"] == "参评非获奖结果"
+            for a in e.articles.all()
+        ):
+            raise ValidationError("推荐参评材料不能作为获奖结果入库。")
+        if action == "approve" and (
+            e.is_noise or editorial.historical_assessment(e)["reason"]
+        ):
+            raise ValidationError("该事件命中噪音规则，请核对原始证据。")
+        if noise_reason:
+            if action != "reject" or noise_reason not in (
+                *editorial.NOISE_TERMS,
+                "其他",
+            ):
+                raise ValidationError("噪音原因无效。")
+            e.noise_reason, e.is_noise, e.filtered_by = noise_reason, True, "人工退回"
+            article = e.articles.order_by("pk").first()
+            IntakeDecision.objects.create(
+                event=e,
+                source=article.source if article else None,
+                url=article.url if article else "",
+                title=e.title,
+                source_zone=e.source_zone,
+                outcome="rejected",
+                filtered_by=e.filtered_by,
+                noise_reason=noise_reason,
+                actor=user.get_username(),
+                analysis={"reason": reason},
+            )
         e.state = "approved" if action == "approve" else "rejected"
         if action == "approve":
             e.approved = e.approved or timezone.now()

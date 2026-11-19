@@ -11,15 +11,15 @@ def business_role(user):
     if not user.is_authenticated or not user.is_active:
         return ""
     if user.is_superuser:
-        return "维护人员"
+        return "运营编辑"
     groups = set(user.groups.values_list("name", flat=True))
-    return next((role for role in ("维护人员", "查看人员") if role in groups), "")
+    return next((role for role in ("运营编辑", "社领导") if role in groups), "")
 
 
 @transaction.atomic
 def save_account(username, role, password=None, *, create_only=False):
     if not isinstance(role, str) or role not in ROLES:
-        raise ValidationError("请选择查看人员或维护人员。")
+        raise ValidationError("请选择社领导或运营编辑。")
     groups = {
         g.name: g
         for g in Group.objects.select_for_update().filter(name__in=ROLES).order_by("id")
@@ -36,13 +36,13 @@ def save_account(username, role, password=None, *, create_only=False):
         if not password:
             raise ValidationError("新账号需要初始密码。")
         user = User(username=username)
-    elif business_role(user) == "维护人员" and role != "维护人员":
+    elif business_role(user) == "运营编辑" and role != "运营编辑":
         if (
-            not User.objects.filter(is_active=True, groups=groups["维护人员"])
+            not User.objects.filter(is_active=True, groups=groups["运营编辑"])
             .exclude(pk=user.pk)
             .exists()
         ):
-            raise ValidationError("至少保留一个可登录的维护人员账号。")
+            raise ValidationError("至少保留一个可登录的运营编辑账号。")
     if password is not None:
         if not isinstance(password, str) or len(password) < 12:
             raise ValidationError("密码至少 12 个字符。")

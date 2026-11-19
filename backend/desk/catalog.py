@@ -36,7 +36,7 @@ BUSINESS_PERMISSIONS = {
 }
 PERMISSIONS = [(v, k) for k, v in BUSINESS_PERMISSIONS.items()]
 
-ROLES = {"查看人员": ("read",), "维护人员": tuple(BUSINESS_PERMISSIONS.values())}
+ROLES = {"社领导": ("read",), "运营编辑": tuple(BUSINESS_PERMISSIONS.values())}
 
 DIGEST_SECTIONS = (
     "中央党报党刊",
