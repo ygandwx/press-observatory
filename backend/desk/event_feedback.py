@@ -42,7 +42,7 @@ def review_automatic(user, pk, data):
     e.version += 1
     e.save()
     article = e.articles.order_by("pk").first()
-    IntakeDecision.objects.create(
+    decision = IntakeDecision.objects.create(
         event=e,
         source=article.source if article else None,
         title=e.title,
@@ -63,7 +63,12 @@ def review_automatic(user, pk, data):
         event=e,
         actor=user.username,
         action="人工复核",
-        detail={"reason": reason, "decision": action, "noise_reason": e.noise_reason},
+        detail={
+            "reason": reason,
+            "decision": action,
+            "noise_reason": e.noise_reason,
+            "intake_decision": decision.pk,
+        },
     )
     return e
 

@@ -1,4 +1,4 @@
-from desk import api, geo_api
+from desk import api, geo_api, noise_api
 from desk import events_api as e
 from desk import management_api as m
 from desk import reports_api as r
@@ -32,6 +32,8 @@ routes = [
     ("media/<int:pk>", m.archives),
     ("monitor", m.monitoring),
     ("monitor/batch", m.collection_batch),
+    ("monitor/noise-weeks", noise_api.noise_weeks),
+    ("monitor/noise-weeks/<str:week>", noise_api.noise_weeks),
     ("monitor/<str:action>", m.operations),
     ("reports", r.reports),
     ("reports/<int:pk>", r.reports),
